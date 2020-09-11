@@ -1,0 +1,5 @@
+bin/
+dist/
+.classpath
+.project
+gp.exe
