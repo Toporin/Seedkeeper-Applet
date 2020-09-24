@@ -146,7 +146,7 @@ public class ObjectManager {
     public boolean clampObject(short type, short id, short new_size) {
         short base = getEntry(type, id);
         if (base == MemoryManager.NULL_OFFSET)
-            ISOException.throwIt((short) 0x9C07);
+            ISOException.throwIt((short) 0x9C07); //TODO: assign code
         // Delegate every check to the Memory Manager
         if (mem.realloc(base, (short) (new_size + OBJ_HEADER_SIZE))) {
             mem.setShort(base, OBJ_H_SIZE, new_size);
