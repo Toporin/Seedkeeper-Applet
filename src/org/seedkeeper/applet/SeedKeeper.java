@@ -316,10 +316,12 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_OFFSET_EXPORT_NBPLAIN=(byte) 3;
     private final static byte SECRET_OFFSET_EXPORT_NBSECURE=(byte) 4;
     private final static byte SECRET_OFFSET_EXPORT_COUNTER=(byte) 5; //(pubkey only) nb of time this pubkey has been used to export secret
-    private final static byte SECRET_OFFSET_FINGERPRINT=(byte) 6;   
-    private final static byte SECRET_OFFSET_LABEL_SIZE=(byte) 10;
-    private final static byte SECRET_OFFSET_LABEL=(byte) 11;
-    private final static byte SECRET_HEADER_SIZE=(byte) 11;
+    private final static byte SECRET_OFFSET_FINGERPRINT=(byte) 6; 
+    private final static byte SECRET_OFFSET_RFU1=(byte) 10; 
+    private final static byte SECRET_OFFSET_RFU2=(byte) 11; 
+    private final static byte SECRET_OFFSET_LABEL_SIZE=(byte) 12;
+    private final static byte SECRET_OFFSET_LABEL=(byte) 13;
+    private final static byte SECRET_HEADER_SIZE=(byte) 13;
     private final static byte SECRET_FINGERPRINT_SIZE=(byte) 4;
         
     // label
@@ -896,7 +898,9 @@ public class SeedKeeper extends javacard.framework.Applet {
         recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]= export_rights;
         recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
         recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
-        recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0; 
+        recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0;
+        recvBuffer[SECRET_OFFSET_RFU1]= (byte)0;
+        recvBuffer[SECRET_OFFSET_RFU2]= (byte)0;
         recvBuffer[SECRET_OFFSET_LABEL_SIZE]= (byte) (label_size & 0x7f);
         Util.arrayFillNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE, (byte)0);
         Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, SECRET_OFFSET_LABEL, label_size);
@@ -991,6 +995,8 @@ public class SeedKeeper extends javacard.framework.Applet {
                 recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
                 recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0;
                 Util.arrayFillNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE, (byte)0);
+                recvBuffer[SECRET_OFFSET_RFU1]= (byte)0;
+                recvBuffer[SECRET_OFFSET_RFU2]= (byte)0;
                 recvBuffer[SECRET_OFFSET_LABEL_SIZE]= (byte) (label_size & 0x7f);
                 Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, SECRET_OFFSET_LABEL, label_size);
                 recv_offset+= (SECRET_HEADER_SIZE+label_size);
