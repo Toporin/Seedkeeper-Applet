@@ -303,19 +303,26 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_EXPORT_ALLOWED = (byte) 0x01; //plain or encrypted
     private final static byte SECRET_EXPORT_SECUREONLY = (byte) 0x02; // only secure export
     private final static byte SECRET_EXPORT_FORBIDDEN = (byte) 0x03; // never allowed
-
+    
+    // origin
+    private final static byte SECRET_ORIGIN_IMPORT_PLAIN= (byte) 0x01; 
+    private final static byte SECRET_ORIGIN_IMPORT_SECURE = (byte) 0x02; 
+    private final static byte SECRET_ORIGIN_ONCARD = (byte) 0x03; 
+    
+    // Offset
     private final static byte SECRET_OFFSET_TYPE=(byte) 0;
-    private final static byte SECRET_OFFSET_EXPORT_CONTROL=(byte) 1;
-    private final static byte SECRET_OFFSET_EXPORT_NBPLAIN=(byte) 2;
-    private final static byte SECRET_OFFSET_EXPORT_NBSECURE=(byte) 3;
-    private final static byte SECRET_OFFSET_EXPORT_COUNTER=(byte) 4; //nb of time this pubkey has been used to export secret
-    private final static byte SECRET_OFFSET_FINGERPRINT=(byte) 5;
-    private final static byte SECRET_OFFSET_LABEL_SIZE=(byte) 9;
-    private final static byte SECRET_OFFSET_LABEL=(byte) 10;
-    private final static byte SECRET_HEADER_SIZE=(byte) 10;
+    private final static byte SECRET_OFFSET_ORIGIN=(byte) 1;
+    private final static byte SECRET_OFFSET_EXPORT_CONTROL=(byte) 2;
+    private final static byte SECRET_OFFSET_EXPORT_NBPLAIN=(byte) 3;
+    private final static byte SECRET_OFFSET_EXPORT_NBSECURE=(byte) 4;
+    private final static byte SECRET_OFFSET_EXPORT_COUNTER=(byte) 5; //(pubkey only) nb of time this pubkey has been used to export secret
+    private final static byte SECRET_OFFSET_FINGERPRINT=(byte) 6;   
+    private final static byte SECRET_OFFSET_LABEL_SIZE=(byte) 10;
+    private final static byte SECRET_OFFSET_LABEL=(byte) 11;
+    private final static byte SECRET_HEADER_SIZE=(byte) 11;
     private final static byte SECRET_FINGERPRINT_SIZE=(byte) 4;
         
-
+    // label
     private final static byte MAX_LABEL_SIZE= (byte) 127; 
     private final static byte MAX_SEED_SIZE= (byte) 64; 
     private final static byte MIN_SEED_SIZE= (byte) 16;
@@ -323,7 +330,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte AES_BLOCKSIZE= (byte)16;
     
     //debug
-    // common data_header: [ type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | fingerprint (4b) | label_size(1b) | label ]
+    // common data_header: [ type(1b) | origin(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | expot_pubkey_counter(1b) | fingerprint (4b) | label_size(1b) | label ]
     // SECRET_TYPE_MASTER_SEED: [ size(1b) | seed_blob ]
     // SECRET_TYPE_ENCRYPTED_MASTER_SEED: [ size(1b) | seed_blob | passphrase_size(1b) | passphrase | e(1b) ]
     // SECRET_TYPE_BIP39_MNEMONIC: [mnemonic_size(1b) | mnemonic | passphrase_size(1b) | passphrase ]
@@ -882,9 +889,10 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (label_size> MAX_LABEL_SIZE)
             ISOException.throwIt(SW_INVALID_PARAMETER);
     
-        // common data_header: [ type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label ]
+        // common data_header: [ type(1b) | origin(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | export_pubkey_counter(1b) | fingerprint(4b) | label_size(1b) | label ]
         // SECRET_TYPE_MASTER_SEED: [ size(1b) | seed_blob ]
         recvBuffer[SECRET_OFFSET_TYPE]= SECRET_TYPE_MASTER_SEED;
+        recvBuffer[SECRET_OFFSET_ORIGIN]= SECRET_ORIGIN_ONCARD;
         recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]= export_rights;
         recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
         recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
@@ -977,6 +985,7 @@ public class SeedKeeper extends javacard.framework.Applet {
 
                 // load (not so sensitive) header data from buffer
                 recvBuffer[SECRET_OFFSET_TYPE]= type;
+                recvBuffer[SECRET_OFFSET_ORIGIN]= SECRET_ORIGIN_IMPORT_PLAIN;
                 recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]= export_rights;
                 recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
                 recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
@@ -1289,7 +1298,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     }
     
         
-    // common data_header: [ type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label ]
+    // common data_header: [ type(1b) | origin(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | export_pubkey_counter(1b) | fingerprint(4b) | label_size(1b) | label ]
     // SECRET_TYPE_MASTER_SEED: [ size(1b) | seed_blob ]
     // SECRET_TYPE_ENCRYPTED_MASTER_SEED: [ size(1b) | seed_blob | passphrase_size(1b) | passphrase | e(1b) ]
     // SECRET_TYPE_BIP39_MNEMONIC: [mnemonic_size(1b) | mnemonic | passphrase_size(1b) | passphrase ]
