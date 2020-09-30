@@ -1127,7 +1127,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      * 
      * ins: 0xA2
      * p1: 0
-     * p2: 0 //operation (Init-Update-Final)?
+     * p2: operation (Init-Update-Final)
      * data: [ id(2b) ]
      * return: 
      * 		(init):[ id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | fingerprint(4b) | label_size(1b) | label  ]
@@ -1137,7 +1137,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         // check that PIN[0] has been entered previously
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
-
+        
         short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         //byte op = buffer[ISO7816.OFFSET_P2];
         short buffer_offset = ISO7816.OFFSET_CDATA;
@@ -1146,118 +1146,123 @@ public class SeedKeeper extends javacard.framework.Applet {
         short enc_size=(short)0;
         short chunk_size=(short)128; // should be multiple of 16 // TODO: make static final
         
-        // first request
-        if (!lock_enabled) {
-            // set lock?
-            lock_enabled = true;
-            lock_ins= INS_EXPORT_PLAIN_SECRET;
-            lock_lastop= OP_INIT;
-            //lock_data_size= (short)0;
-            lock_data_remaining= (short)0;
-            lock_recv_offset= (short)0;
-            
-            // get id
-            if (bytes_left<2){
-                resetLock();// TODO: reset or not?
-                ISOException.throwIt(SW_INVALID_PARAMETER);}
-            buffer_offset = ISO7816.OFFSET_CDATA;
-            lock_id= Util.getShort(buffer, ISO7816.OFFSET_CDATA);
-            
-            // log operation to be updated later
-            logger.createLog(INS_EXPORT_PLAIN_SECRET, lock_id, (short)0, (short)0x0000);
-            
-            // copy to buffer
-            short base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
-            if (base==(short)0xFFFF)
-                ISOException.throwIt(SW_OBJECT_NOT_FOUND);
-            short obj_size= om_secrets.getSizeFromAddress(base);
-            om_secrets.getObjectData(base, (short)0, recvBuffer, (short)0, obj_size);
-            // check export rights
-            if (recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]!=SECRET_EXPORT_ALLOWED){
-                resetLock();// TODO: reset or not?
-                ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
-            }
-            // update export_nb in object
-            recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]+=1;
-            om_secrets.setObjectByte(base, SECRET_OFFSET_EXPORT_NBPLAIN, recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]);
-            
-            // copy id & header to buffer
-            Util.setShort(buffer, (short)0, lock_id);
-            short label_size= Util.makeShort((byte)0, recvBuffer[SECRET_OFFSET_LABEL_SIZE]);
-            Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
-            recv_offset= (short)(SECRET_HEADER_SIZE+label_size);
-            lock_recv_offset= recv_offset;
-            lock_data_remaining= (short)(obj_size-recv_offset);
-            
-            // initialize cipher & signature for next phases
-            om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
-            sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-            sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
-            
-            // the client can recover full public-key from the signature or
-            // by guessing the compression value () and verifying the signature... 
-            // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label | sigsize(2) | sig]
-            return (short)(2+SECRET_HEADER_SIZE+label_size);
-            
-        // following requests
-        } else {
-            // check lock
-            if ( (lock_ins!= INS_EXPORT_PLAIN_SECRET) ||
-                 (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
-            {
-                resetLockException();
-            }
-            
-            // decrypt & export data chunk by chunk
-            if (lock_data_remaining>chunk_size){
+        byte op = buffer[ISO7816.OFFSET_P2];
+        switch (op) {
+            case OP_INIT: // first request
+                // set lock?
+                lock_enabled = true;
+                lock_ins= INS_EXPORT_PLAIN_SECRET;
+                lock_lastop= OP_INIT;
+                //lock_data_size= (short)0;
+                lock_data_remaining= (short)0;
+                lock_recv_offset= (short)0;
                 
-                enc_size= om_aes128_ecb.update(recvBuffer, lock_recv_offset, chunk_size, buffer, (short)2);
-                Util.setShort(buffer, (short)(0), enc_size);
-                lock_recv_offset+= chunk_size;
-                //lock_data_size+=enc_size;
-                lock_data_remaining-=chunk_size;
-                
-                // update sign with authentikey
-                sigECDSA.update(buffer, (short)2, enc_size);
-                
-                // buffer= [data_size(2b) | data_chunk]
-                return (short)(2+enc_size);
-            
-            //finalize last chunk
-            }else{ 
-                
-                enc_size= om_aes128_ecb.doFinal(recvBuffer, lock_recv_offset, lock_data_remaining, buffer, (short)2);
-                //remove padding
-                byte padsize= buffer[(short)(2+enc_size-1)];
-                enc_size-=padsize;
-                Util.setShort(buffer, (short)(0), enc_size);
-                lock_recv_offset+= lock_data_remaining;
-                lock_data_remaining=(short)0;
-                
-                // finalize sign with authentikey
-                short sign_size= sigECDSA.sign(buffer, (short)2, enc_size, buffer, (short)(2+enc_size+2));
-                Util.setShort(buffer, (short)(2+enc_size), sign_size);
+                // get id
+                if (bytes_left<2){
+                    resetLock();// TODO: reset or not?
+                    ISOException.throwIt(SW_INVALID_PARAMETER);}
+                buffer_offset = ISO7816.OFFSET_CDATA;
+                lock_id= Util.getShort(buffer, ISO7816.OFFSET_CDATA);
                 
                 // log operation to be updated later
-                logger.updateLog(INS_EXPORT_PLAIN_SECRET, lock_id, (short)0, (short)0x9000);
+                logger.createLog(INS_EXPORT_PLAIN_SECRET, lock_id, (short)0, (short)0x0000);
                 
-                // update/finalize lock
-                Util.arrayFillNonAtomic(recvBuffer, (short)0, lock_recv_offset, (byte)0x00);
-                lock_ins= (byte)0x00;
-                lock_lastop= (byte)0x00;
-                lock_id=(short)0;
-                //lock_data_size= (short)0;
-                lock_recv_offset=(short)0;
-                lock_enabled = false;
+                // copy to buffer
+                short base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
+                if (base==(short)0xFFFF){
+                    resetLock();
+                    ISOException.throwIt(SW_OBJECT_NOT_FOUND);
+                }
+                short obj_size= om_secrets.getSizeFromAddress(base);
+                om_secrets.getObjectData(base, (short)0, recvBuffer, (short)0, obj_size);
+                // check export rights
+                if (recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]!=SECRET_EXPORT_ALLOWED){
+                    resetLock();// TODO: reset or not?
+                    ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
+                }
+                // update export_nb in object
+                recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]+=1;
+                om_secrets.setObjectByte(base, SECRET_OFFSET_EXPORT_NBPLAIN, recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]);
+                
+                // copy id & header to buffer
+                Util.setShort(buffer, (short)0, lock_id);
+                short label_size= Util.makeShort((byte)0, recvBuffer[SECRET_OFFSET_LABEL_SIZE]);
+                Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
+                recv_offset= (short)(SECRET_HEADER_SIZE+label_size);
+                lock_recv_offset= recv_offset;
+                lock_data_remaining= (short)(obj_size-recv_offset);
+                
+                // initialize cipher & signature for next phases
+                om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
+                sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+                sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
                 
                 // the client can recover full public-key from the signature or
                 // by guessing the compression value () and verifying the signature... 
-                // buffer= [data_size(2b) | data_chunk | sigsize(2) | sig]
-                return (short)(2+enc_size+2+sign_size);                
-            }
-        } //end else       
+                // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label | sigsize(2) | sig]
+                return (short)(2+SECRET_HEADER_SIZE+label_size);
+                
+            case OP_PROCESS: // following requests
+                // check lock
+                if ( (lock_ins!= INS_EXPORT_PLAIN_SECRET) ||
+                     (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
+                {
+                    resetLockException();
+                }
+                
+                // decrypt & export data chunk by chunk
+                if (lock_data_remaining>chunk_size){
+                    
+                    enc_size= om_aes128_ecb.update(recvBuffer, lock_recv_offset, chunk_size, buffer, (short)2);
+                    Util.setShort(buffer, (short)(0), enc_size);
+                    lock_recv_offset+= chunk_size;
+                    //lock_data_size+=enc_size;
+                    lock_data_remaining-=chunk_size;
+                    
+                    // update sign with authentikey
+                    sigECDSA.update(buffer, (short)2, enc_size);
+                    
+                    // buffer= [data_size(2b) | data_chunk]
+                    return (short)(2+enc_size);
+                
+                //finalize last chunk
+                }else{ 
+                    
+                    enc_size= om_aes128_ecb.doFinal(recvBuffer, lock_recv_offset, lock_data_remaining, buffer, (short)2);
+                    //remove padding
+                    byte padsize= buffer[(short)(2+enc_size-1)];
+                    enc_size-=padsize;
+                    Util.setShort(buffer, (short)(0), enc_size);
+                    lock_recv_offset+= lock_data_remaining;
+                    lock_data_remaining=(short)0;
+                    
+                    // finalize sign with authentikey
+                    short sign_size= sigECDSA.sign(buffer, (short)2, enc_size, buffer, (short)(2+enc_size+2));
+                    Util.setShort(buffer, (short)(2+enc_size), sign_size);
+                    
+                    // log operation to be updated later
+                    logger.updateLog(INS_EXPORT_PLAIN_SECRET, lock_id, (short)0, (short)0x9000);
+                    
+                    // update/finalize lock
+                    Util.arrayFillNonAtomic(recvBuffer, (short)0, lock_recv_offset, (byte)0x00);
+                    lock_ins= (byte)0x00;
+                    lock_lastop= (byte)0x00;
+                    lock_id=(short)0;
+                    //lock_data_size= (short)0;
+                    lock_recv_offset=(short)0;
+                    lock_enabled = false;
+                    
+                    // the client can recover full public-key from the signature or
+                    // by guessing the compression value () and verifying the signature... 
+                    // buffer= [data_size(2b) | data_chunk | sigsize(2) | sig]
+                    return (short)(2+enc_size+2+sign_size);                
+                }
+            default:
+                resetLock();
+                ISOException.throwIt(SW_INCORRECT_P2);
+        }// end switch   
         
-        //return (short)(0); // should never happen
+        return (short)(0); // should never happen
     }// end exportPlainSecret
 
     /** TODO **/
