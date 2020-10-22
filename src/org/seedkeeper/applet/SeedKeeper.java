@@ -127,10 +127,11 @@ public class SeedKeeper extends javacard.framework.Applet {
     // Status information
     private final static byte INS_LIST_PINS = (byte) 0x48;
     private final static byte INS_GET_STATUS = (byte) 0x3C;
+    private final static byte INS_CARD_LABEL= (byte)0x3D;
 
     // HD wallet
-    private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
-    private final static byte INS_BIP32_RESET_SEED= (byte) 0x77;
+    //private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
+    //private final static byte INS_BIP32_RESET_SEED= (byte) 0x77;
     private final static byte INS_BIP32_GET_AUTHENTIKEY= (byte) 0x73;
     private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75;
     //	private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
@@ -148,7 +149,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte INS_INIT_SECURE_CHANNEL = (byte) 0x81;
     private final static byte INS_PROCESS_SECURE_CHANNEL = (byte) 0x82;
 
-    // seed mgmgt
+    // SeedKeeper
     private final static byte INS_GENERATE_MASTERSEED= (byte)0xA0;
     private final static byte INS_IMPORT_SECRET= (byte)0xA1;
     private final static byte INS_EXPORT_SECRET= (byte)0xA2;
@@ -161,7 +162,6 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_IMPORT_SHAMIR_SHARED_SECRET= (byte)0xA7;
     //private final static byte INS_EXPORT_SHAMIR_SHARED_SECRET= (byte)0xA8;
     private final static byte INS_PRINT_LOGS= (byte)0xA9;
-     
     
     /****************************************
      *          Error codes                 *
@@ -281,7 +281,11 @@ public class SeedKeeper extends javacard.framework.Applet {
     //logger logs critical operations performed by the applet such as key export
     private Logger logger;
     private final static short LOGGER_NBRECORDS= (short) 100;
-
+    
+    private final static byte MAX_CARD_LABEL_SIZE = (byte) 64;
+    private byte card_label_size= (byte)0x00;
+    private byte[] card_label;
+    
     // seeds data array
     // for each element: [id | mnemonic | passphrase | master_seed | encrypted_master_seed | label | status | settings ]
     // status: externaly/internaly generated, shamir, bip39 or electrum, 
@@ -357,7 +361,6 @@ public class SeedKeeper extends javacard.framework.Applet {
     private byte[] tmpBuffer; //used for hmac computation
     private byte[] tmpBuffer2; //used in securechannel
     
-
     /*
      * Logged identities: this is used for faster access control, so we don't
      * have to ping each PIN object
@@ -500,14 +503,15 @@ public class SeedKeeper extends javacard.framework.Applet {
         } catch (SystemException e) {
             secret_sc_buffer = new byte[SIZE_SC_BUFFER];
         }
-        //sc_IV= new byte[(short)16];//todo make transient and combine?
-        //sc_mackey= new byte[(short)20];
         sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false); // todo: make transient?
         sc_ephemeralkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
         sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
         secret_sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         secret_sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
-
+        
+        // card label
+        card_label= new byte[MAX_CARD_LABEL_SIZE];
+        
         // debug
         register();
     } // end of constructor
@@ -630,6 +634,9 @@ public class SeedKeeper extends javacard.framework.Applet {
                 break;
             case INS_GET_STATUS:
                 sizeout= GetStatus(apdu, buffer);
+                break;
+            case INS_CARD_LABEL:
+                sizeout= card_label(apdu, buffer);
                 break;
             case INS_BIP32_GET_AUTHENTIKEY:
                 sizeout= getBIP32AuthentiKey(apdu, buffer);
@@ -2255,7 +2262,55 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         return pos;
     }
-
+    
+    /**
+     * This function allows to define or recover a short description of the card.
+     * 
+     *  ins: 0x3D
+     *  p1: 0x00 
+     *  p2: operation (0x00 to set label, 0x01 to get label)
+     *  data: [label_size(1b) | label ] if p2==0x00 else (none)
+     *  return: [label_size(1b) | label ] if p2==0x01 else (none)
+     */
+    private short card_label(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        byte op = buffer[ISO7816.OFFSET_P2];
+        switch (op) {
+            case 0x00: // set label
+                short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+                short buffer_offset = ISO7816.OFFSET_CDATA;
+                if (bytes_left>0){
+                    short label_size= Util.makeShort((byte) 0x00, buffer[buffer_offset]);
+                    if (label_size>bytes_left)
+                        ISOException.throwIt(SW_INVALID_PARAMETER);
+                    if (label_size>MAX_CARD_LABEL_SIZE)
+                        ISOException.throwIt(SW_INVALID_PARAMETER);
+                    card_label_size= buffer[buffer_offset];
+                    bytes_left--;
+                    buffer_offset++;
+                    Util.arrayCopyNonAtomic(buffer, buffer_offset, card_label, (short)0, label_size);
+                }
+                else if (bytes_left==0){//reset label
+                    card_label_size= (byte)0x00;
+                }
+                return (short)0;
+                
+            case 0x01: // get label
+                buffer[(short)0]=card_label_size;
+                Util.arrayCopyNonAtomic(card_label, (short)0, buffer, (short)1, card_label_size);
+                return (short)(card_label_size+1);
+                
+            default:
+                ISOException.throwIt(SW_INCORRECT_P2);
+                
+        }//end switch()
+        
+        return (short)0;
+    }
+    
     /**
      * This function returns the authentikey public key (uniquely derived from the Bip32 seed).
      * The function returns the x-coordinate of the authentikey, self-signed.
