@@ -375,8 +375,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     private byte lock_ins=(byte)0;
     private byte lock_lastop=(byte)0;
     private byte lock_transport_mode= (byte)0;
-    private short lock_id=0;
-    private short lock_id_pubkey=0;
+    private short lock_id=-1;
+    private short lock_id_pubkey=-1;
     private short lock_recv_offset=(short)0;
     private short lock_data_size=(short)0;
     private short lock_data_remaining=(short)0;
@@ -904,7 +904,7 @@ public class SeedKeeper extends javacard.framework.Applet {
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         // log operation
-        logger.createLog(INS_GENERATE_MASTERSEED, (short)0, (short)0, (short)0x0000);
+        logger.createLog(INS_GENERATE_MASTERSEED, (short)-1, (short)-1, (short)0x0000);
         
         byte seed_size= buffer[ISO7816.OFFSET_P1];
         if ((seed_size < MIN_SEED_SIZE) || (seed_size > MAX_SEED_SIZE) )
@@ -958,7 +958,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         om_secrets.setObjectData(base, (short)0, recvBuffer, (short)0, recv_offset);
         
         // log operation (todo: fill log as soon as available)
-        logger.updateLog(INS_GENERATE_MASTERSEED, om_nextid, (short)0, (short)0x9000);
+        logger.updateLog(INS_GENERATE_MASTERSEED, om_nextid, (short)-1, (short)0x9000);
         
         // Fill the buffer
         Util.setShort(buffer, (short) 0, om_nextid);
@@ -1349,7 +1349,9 @@ public class SeedKeeper extends javacard.framework.Applet {
         switch (op) {
             case OP_INIT:
                 // log operation to be updated later
-                logger.createLog(INS_IMPORT_SECRET, (short)0, (short)0, (short)0x0000);
+                lock_id=(short)-1;
+                lock_id_pubkey=(short)-1;
+                logger.createLog(INS_IMPORT_SECRET, lock_id, lock_id_pubkey, (short)0x0000);
                 
                 // TODO: check lock?
                 if (bytes_left<SECRET_HEADER_SIZE)
@@ -1589,7 +1591,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 om_secrets.setObjectData(base, (short)0, recvBuffer, (short)0, recv_offset);
                 
                 // log operation
-                logger.updateLog(INS_IMPORT_SECRET, om_nextid, (short)0, (short)0x9000);
+                logger.updateLog(INS_IMPORT_SECRET, om_nextid, lock_id_pubkey, (short)0x9000);
                 
                 // Fill the R-APDU buffer
                 Util.setShort(buffer, (short) 0, om_nextid);
@@ -1655,7 +1657,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 lock_lastop= OP_INIT;
                 lock_data_remaining= (short)0;
                 lock_recv_offset= (short)0;
-                lock_id_pubkey= (short)0;
+                lock_id_pubkey= (short)-1;
                 
                 // get id
                 if (bytes_left<2){
@@ -1842,8 +1844,8 @@ public class SeedKeeper extends javacard.framework.Applet {
                     Util.arrayFillNonAtomic(recvBuffer, (short)0, lock_recv_offset, (byte)0x00);
                     lock_ins= (byte)0x00;
                     lock_lastop= (byte)0x00;
-                    lock_id=(short)0;
-                    lock_id_pubkey=(short)0;
+                    lock_id=(short)-1;
+                    lock_id_pubkey=(short)-1;
                     lock_transport_mode= (byte)0;
                     lock_recv_offset=(short)0;
                     lock_enabled = false;
@@ -2049,7 +2051,7 @@ public class SeedKeeper extends javacard.framework.Applet {
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) ISO7816.OFFSET_CDATA, (byte) bytesLeft)) {
             LogoutIdentity(pin_nb);
-            logger.createLog(INS_VERIFY_PIN, (short)0, (short)0, (short)(SW_PIN_FAILED + triesRemaining - 1) );
+            logger.createLog(INS_VERIFY_PIN, (short)-1, (short)-1, (short)(SW_PIN_FAILED + triesRemaining - 1) );
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         }
 
@@ -2103,7 +2105,7 @@ public class SeedKeeper extends javacard.framework.Applet {
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size)) {
             LogoutIdentity(pin_nb);
-            logger.createLog(INS_CHANGE_PIN, (short)0, (short)0, (short)(SW_PIN_FAILED + triesRemaining - 1) );
+            logger.createLog(INS_CHANGE_PIN, (short)-1, (short)-1, (short)(SW_PIN_FAILED + triesRemaining - 1) );
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         }
 
@@ -2151,7 +2153,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!ublk_pin.check(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft)){
-            logger.createLog(INS_UNBLOCK_PIN, (short)0, (short)0, (short)(SW_PIN_FAILED + triesRemaining - 1) );
+            logger.createLog(INS_UNBLOCK_PIN, (short)-1, (short)-1, (short)(SW_PIN_FAILED + triesRemaining - 1) );
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         }
 
