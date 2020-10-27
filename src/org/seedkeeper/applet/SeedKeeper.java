@@ -235,6 +235,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static short SW_IMPORTED_DATA_TOO_LONG= (short) 0x9C32;
     /** Wrong HMAC when importing Secret through Secure import**/
     private final static short SW_SECURE_IMPORT_WRONG_MAC= (short) 0x9C33;
+    /** Wrong Fingerprint when importing Secret through Secure import**/
+    private final static short SW_SECURE_IMPORT_WRONG_FINGERPRINT= (short) 0x9C34;
     
     /** HMAC errors */
     static final short SW_HMAC_UNSUPPORTED_KEYSIZE = (short) 0x9c1E;
@@ -408,7 +410,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     //	private static final short BIP32_OBJECT_SIZE= (short)(2*BIP32_KEY_SIZE+BIP32_ANTICOLLISION_LENGTH+1);  //TODO
 
     //   bip32 keys
-    private boolean bip32_seeded= false;
+    //private boolean bip32_seeded= false;
 
 
     /*********************************************
@@ -434,9 +436,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private static final byte SIZE_SC_BUFFER=SIZE_SC_MACKEY+SIZE_SC_IV;
 
     private ECPrivateKey bip32_authentikey; // key used to authenticate data
-    private byte[] authentikey_pubkey;// store authentikey coordx pubkey ?
-
-
+    
     // additional options
     private short option_flags;
 
@@ -508,6 +508,12 @@ public class SeedKeeper extends javacard.framework.Applet {
         sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
         secret_sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         secret_sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
+        
+        // authentikey => used to authenticate applet communication
+        bip32_authentikey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        Secp256k1.setCommonCurveParameters(bip32_authentikey);
+        randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
+        bip32_authentikey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
         
         // card label
         card_label= new byte[MAX_CARD_LABEL_SIZE];
@@ -824,15 +830,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         
         // HD wallet
         //HmacSha512.init(tmpBuffer); // TODO: remove?
-
-        // authentikey => used to authenticate applet communication
-        bip32_authentikey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-        Secp256k1.setCommonCurveParameters(bip32_authentikey);
-        randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        bip32_authentikey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
-
-        // bip32 material
-        bip32_seeded= true;
 
         // parse options
         option_flags=0;
@@ -1318,7 +1315,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     /** 
      * This function imports a secret in plaintext/encrypted from host.
      * 
-     * ins: 0xA3
+     * ins: 0xA1
      * p1: 0x01 (plain import) or 0x02 (secure import)
      * p2: operation (Init-Update-Final)
      * data:
@@ -1373,7 +1370,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 if (label_size> MAX_LABEL_SIZE)
                     ISOException.throwIt(SW_INVALID_PARAMETER);
                 buffer_offset++;
-                bytes_left-=5;
+                bytes_left-=SECRET_HEADER_SIZE;//5;
                 if (bytes_left<label_size)
                     ISOException.throwIt(SW_INVALID_PARAMETER);
                 short label_offset= buffer_offset;
@@ -1621,7 +1618,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      * Data is encrypted during transport through the Secure Channel
      * but the host has access to the data in plaintext.
      * 
-     * ins: 0xA5
+     * ins: 0xA2
      * p1: 0x01 (plain export) or 0x02 (secure export)
      * p2: operation (Init-Update)
      * data: [ id(2b) | id_pubkey(2b) ]
@@ -2245,11 +2242,11 @@ public class SeedKeeper extends javacard.framework.Applet {
             buffer[pos++] = (byte) 0;
             buffer[pos++] = (byte) 0;
         }
-        if (true) // needs_2FA => RFU
+        if (false) // needs_2FA => maintained for intercompatibility with Satochip but not (currently) used
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
-        if (bip32_seeded) 
+        if (true) // bip32_seeded => maintained for intercompatibility with Satochip but not used
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
@@ -2329,9 +2326,9 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
-        // check whether the seed is initialized
-        if (!bip32_seeded)
-            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+//        // check whether the seed is initialized
+//        if (!bip32_seeded)
+//            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 
         // compute the partial authentikey public key...
         keyAgreement.init(bip32_authentikey);        
@@ -2429,17 +2426,12 @@ public class SeedKeeper extends javacard.framework.Applet {
         short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
         Util.setShort(buffer, (short)(coordx_size+2), sign_size);
 
-        // hash signed by authentikey if seed is initialized
+        // hash signed by authentikey
         short offset= (short)(2+coordx_size+2+sign_size);
-        if (bip32_seeded){
-            sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-            short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
-            Util.setShort(buffer, offset, sign2_size);
-            offset+=(short)(2+sign2_size); 
-        }else{
-            Util.setShort(buffer, offset, (short)0);
-            offset+=(short)2;
-        }
+        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+        short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
+        Util.setShort(buffer, offset, sign2_size);
+        offset+=(short)(2+sign2_size); 
 
         initialized_secure_channel= true;
 
