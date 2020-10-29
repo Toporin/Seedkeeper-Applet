@@ -162,7 +162,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_IMPORT_SHAMIR_SHARED_SECRET= (byte)0xA7;
     //private final static byte INS_EXPORT_SHAMIR_SHARED_SECRET= (byte)0xA8;
     private final static byte INS_PRINT_LOGS= (byte)0xA9;
-    
+	private final static byte INS_EXPORT_AUTHENTIKEY= (byte) 0xAD;
+	
     /****************************************
      *          Error codes                 *
      ****************************************/
@@ -659,18 +660,6 @@ public class SeedKeeper extends javacard.framework.Applet {
             case INS_EXPORT_SECRET:
                 sizeout= exportSecret(apdu, buffer);
                 break;
-//            case INS_IMPORT_PLAIN_SECRET:
-//                sizeout= importPlainSecret(apdu, buffer);
-//                break;
-//            case INS_EXPORT_PLAIN_SECRET:
-//                sizeout= exportPlainSecret(apdu, buffer);
-//                break;
-//            case INS_IMPORT_ENCRYPTED_SECRET:
-//                sizeout= importEncryptedSecret(apdu, buffer);
-//                break;
-//            case INS_EXPORT_ENCRYPTED_SECRET:
-//                sizeout= exportEncryptedSecret(apdu, buffer);
-//                break;
             case INS_RESET_SECRET:
                 sizeout= resetSecret(apdu, buffer);
                 break;
@@ -680,6 +669,9 @@ public class SeedKeeper extends javacard.framework.Applet {
             case INS_PRINT_LOGS:
                 sizeout= printLogs(apdu, buffer);
                 break;
+            case INS_EXPORT_AUTHENTIKEY:
+                sizeout= exportAuthentikey(apdu, buffer);
+                break;    
             default:
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         }//end of switch
@@ -2311,6 +2303,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     }
     
     /**
+     * DEPRECATED - use exportAuthentikey() instead
      * This function returns the authentikey public key (uniquely derived from the Bip32 seed).
      * The function returns the x-coordinate of the authentikey, self-signed.
      * The authentikey full public key can be recovered from the signature.
@@ -2322,30 +2315,71 @@ public class SeedKeeper extends javacard.framework.Applet {
      *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
      */
     private short getBIP32AuthentiKey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-
-//        // check whether the seed is initialized
-//        if (!bip32_seeded)
-//            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-
-        // compute the partial authentikey public key...
+        return exportAuthentikey(apdu, buffer);
+        
+//    	// check that PIN[0] has been entered previously
+//        if (!pins[0].isValidated())
+//            ISOException.throwIt(SW_UNAUTHORIZED);
+//
+////        // check whether the seed is initialized
+////        if (!bip32_seeded)
+////            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+//
+//        // compute the partial authentikey public key...
+//        keyAgreement.init(bip32_authentikey);        
+//        short coordx_size= (short)32;
+//        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+//        Util.setShort(buffer, (short)0, coordx_size);
+//        // self signed public key
+//        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+//        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
+//        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+//
+//        // return x-coordinate of public key+signature
+//        // the client can recover full public-key from the signature or
+//        // by guessing the compression value () and verifying the signature... 
+//        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
+//        return (short)(coordx_size+sign_size+4);
+    }
+    
+    /**
+	 * This function returns the authentikey public key.
+	 * The function returns the x-coordinate of the authentikey, self-signed.
+	 * The authentikey full public key can be recovered from the signature.
+	 * 
+	 * Compared to getBIP32AuthentiKey(), this method returns the Authentikey even if the card is not seeded.
+	 * For SeedKeeper encrypted seed import, we use the authentikey as a Trusted Pubkey for the ECDH key exchange, 
+	 * thus the authentikey must be available before the Satochip is seeded. 
+	 * Before a seed is available, the authentiey is generated oncard randomly in the constructor
+	 * 
+	 *  ins: 0xAD
+	 *  p1: 0x00 
+	 *  p2: 0x00 
+	 *  data: none
+	 *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
+	 */
+	private short exportAuthentikey(APDU apdu, byte[] buffer){
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
+		// compute the partial authentikey public key...
         keyAgreement.init(bip32_authentikey);        
         short coordx_size= (short)32;
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, coordx_size);
+    	keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+		Util.setShort(buffer, (short)0, coordx_size);
         // self signed public key
         sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
         short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
         Util.setShort(buffer, (short)(coordx_size+2), sign_size);
-
+        
         // return x-coordinate of public key+signature
         // the client can recover full public-key from the signature or
         // by guessing the compression value () and verifying the signature... 
         // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
         return (short)(coordx_size+sign_size+4);
-    }	
+	}
+    
     /**
      * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
      * A minimalist API is maintained for backward compatibility.
