@@ -1417,7 +1417,8 @@ public class SeedKeeper extends javacard.framework.Applet {
                     secret_sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_DECRYPT, buffer, buffer_offset, SIZE_SC_IV);
                     // init hash for mac
                     secret_sha256.reset();
-                    secret_sha256.update(buffer, ISO7816.OFFSET_CDATA, (short)(SECRET_HEADER_SIZE+label_size));
+                    //secret_sha256.update(buffer, ISO7816.OFFSET_CDATA, (short)(SECRET_HEADER_SIZE+label_size));
+                    secret_sha256.update(buffer, ISO7816.OFFSET_CDATA, (short)(SECRET_HEADER_SIZE-1)); //do not hash the label & label_size, so thay can be modified between export and import
                 }
                 
                 // load (not so sensitive) header data from buffer
@@ -1541,16 +1542,11 @@ public class SeedKeeper extends javacard.framework.Applet {
                         ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);}
                     
                     buffer_offset=(short)(ISO7816.OFFSET_CDATA+2); //get back to offset with encrypted data
-                    /*DEBUG*/
-                    //neutralize encryption
                     dec_size= secret_sc_aes128_cbc.doFinal(buffer, buffer_offset, data_size, buffer, buffer_offset);
-                    //dec_size=data_size;
-                    /*ENDBUG*/
                     
                     //already padded
                     padsize= buffer[(short)(buffer_offset+dec_size-1)];
                     data_size=(short)(dec_size-padsize);
-                    
                 }
                 else{
                     // padding
@@ -1749,7 +1745,8 @@ public class SeedKeeper extends javacard.framework.Applet {
                 om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
                 if (lock_transport_mode==SECRET_EXPORT_SECUREONLY){
                     secret_sha256.reset();
-                    secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
+                    //secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
+                    secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE-1)); //do not hash label & label_size => may be changed during import
                 }else{
                     sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
                     sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
