@@ -410,25 +410,12 @@ public class SeedKeeper extends javacard.framework.Applet {
     /*********************************************
      *  BIP32 Hierarchical Deterministic Wallet  *
      *********************************************/
-    //	// Secure Memory & Object Manager with no access from outside (used internally for storing BIP32 objects)
-    //	private Bip32ObjectManager bip32_om;
-
+    
     // seed derivation
     private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
     private static final byte[] BITCOIN_SEED2 = {'B','i','t','c','o','i','n',' ','s','e','e','d','2'};
     private static final short BIP32_KEY_SIZE= 32; // size of extended key and chain code is 256 bits
     //	private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
-
-    //	// BIP32_object= [ hash(address) (4b) | extended_key (32b) | chain_code (32b) | compression_byte(1b)]
-    //	// recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | hash(address) (32b) | current_extended_key(32b) | current_chain_code(32b) ]
-    //	// hash(address)= [ index(4b) | unused (28-4b) | ANTICOLLISIONHASH(4b)]
-    //	private static final short BIP32_KEY_SIZE= 32; // size of extended key and chain code is 256 bits
-    //	private static final short BIP32_ANTICOLLISION_LENGTH=4; // max 12 bytes so that index+crc + two hashes fit in 32 bits
-    //	private static final short BIP32_OBJECT_SIZE= (short)(2*BIP32_KEY_SIZE+BIP32_ANTICOLLISION_LENGTH+1);  //TODO
-
-    //   bip32 keys
-    //private boolean bip32_seeded= false;
-
 
     /*********************************************
      *        Other data instances               *
@@ -635,42 +622,12 @@ public class SeedKeeper extends javacard.framework.Applet {
             //if sizeout>4, buffer[ISO7816.OFFSET_LC] should be equal to (sizeout-5)
             //todo: remove padding ? (it is actually not used)			
         }
-//        else if (!personalizationDone){ // todo: always use secure channel?
-//            if (ins == INS_VERIFY_PIN){
-//                sizeout= VerifyPIN(apdu, buffer);
-//                apdu.setOutgoingAndSend((short) 0, sizeout);
-//                return;
-//            }else if (ins == INS_EXPORT_PKI_PUBKEY){
-//                sizeout= export_PKI_pubkey(apdu, buffer);
-//                apdu.setOutgoingAndSend((short) 0, sizeout);
-//                return;
-//            } else if (ins == INS_IMPORT_PKI_CERTIFICATE){
-//                sizeout= import_PKI_certificate(apdu, buffer);
-//                apdu.setOutgoingAndSend((short) 0, sizeout);
-//                return;
-//            } else if (ins == INS_SIGN_PKI_CSR){
-//                sizeout= sign_PKI_CSR(apdu, buffer);
-//                apdu.setOutgoingAndSend((short) 0, sizeout);
-//                return;
-//            } else if (ins == INS_LOCK_PKI){
-//                sizeout= lock_PKI(apdu, buffer);
-//                apdu.setOutgoingAndSend((short) 0, sizeout);
-//                return;
-//            } else {
-//                ISOException.throwIt(SW_SECURE_CHANNEL_REQUIRED); 
-//            }
-//        }
         else if (needs_secure_channel){
             ISOException.throwIt(SW_SECURE_CHANNEL_REQUIRED);
         }
 
         // at this point, the encrypted content has been deciphered in the buffer
         ins = buffer[ISO7816.OFFSET_INS];
-        // check setup status 
-        //if (!setupDone && (ins != INS_SETUP)){
-        //    ISOException.throwIt(SW_SETUP_NOT_DONE);
-        //}
-        // before setup, only personalization is allowed
         if (!setupDone && (ins != INS_SETUP)){
             if (personalizationDone ||
                     ((ins != INS_VERIFY_PIN) 
@@ -1052,351 +1009,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         // Send response
         return (short)(2+SECRET_FINGERPRINT_SIZE);
     }
-
-    
-    /** 
-     * DEPRECATED: use importSecret() instead.
-     * This function imports a secret in plaintext from host.
-     * 
-     * ins: 0xA1
-     * p1: 0
-     * p2: operation (Init-Update-Final)
-     * data:
-     * 		(init): [ type(1b) | export_control(1b) | label_size(1b) | label ]
-     *          TODO: add RFU(2b)?
-     * 		(update):[chunk_size(2b) | data_blob ]
-     * 		(final): [chunk_size(2b) | data_blob ]
-     * return: [ id(2b) | fingerprint(4b) ]
-     */
-//    private short importPlainSecret(APDU apdu, byte[] buffer){
-//        // check that PIN[0] has been entered previously
-//        if (!pins[0].isValidated())
-//            ISOException.throwIt(SW_UNAUTHORIZED);
-//
-//        short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-//        byte op = buffer[ISO7816.OFFSET_P2];
-//        short buffer_offset = ISO7816.OFFSET_CDATA;
-//        short recv_offset = (short)0;
-//        short data_size= (short)0;
-//        short enc_size=(short)0;
-//
-//        switch (op) {
-//            case OP_INIT:
-//                // log operation to be updated later
-//                logger.createLog(INS_IMPORT_PLAIN_SECRET, (short)0, (short)0, (short)0x0000);
-//                
-//                // TODO: check lock?
-//                if (bytes_left<3)
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//
-//                byte type= buffer[buffer_offset];
-//                buffer_offset++;
-//                byte export_rights= buffer[buffer_offset];
-//                buffer_offset++;
-//                if ((export_rights < SECRET_EXPORT_ALLOWED) || (export_rights > SECRET_EXPORT_FORBIDDEN) )
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//                short label_size= Util.makeShort((byte) 0x00, buffer[buffer_offset]);
-//                if (label_size> MAX_LABEL_SIZE)
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//                buffer_offset++;
-//                bytes_left-=3;
-//                if (bytes_left<label_size)
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//
-//                // load (not so sensitive) header data from buffer
-//                recvBuffer[SECRET_OFFSET_TYPE]= type;
-//                recvBuffer[SECRET_OFFSET_ORIGIN]= SECRET_ORIGIN_IMPORT_PLAIN;
-//                recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]= export_rights;
-//                recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
-//                recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
-//                recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0;
-//                Util.arrayFillNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE, (byte)0);
-//                recvBuffer[SECRET_OFFSET_RFU1]= (byte)0;
-//                recvBuffer[SECRET_OFFSET_RFU2]= (byte)0;
-//                recvBuffer[SECRET_OFFSET_LABEL_SIZE]= (byte) (label_size & 0x7f);
-//                Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, SECRET_OFFSET_LABEL, label_size);
-//                recv_offset+= (SECRET_HEADER_SIZE+label_size);
-//
-//                // initialize cipher 
-//                om_aes128_ecb.init(om_encryptkey, Cipher.MODE_ENCRYPT);
-//                sha256.reset();
-//
-//                //TODO: ensure atomicity?
-//                lock_enabled = true;
-//                lock_ins= INS_IMPORT_PLAIN_SECRET;
-//                lock_lastop= OP_INIT;
-//                lock_recv_offset= recv_offset;
-//                lock_data_size= (short)0;
-//                return (short)0;
-//                
-//                //DEBUG
-//                //Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, (short)(recv_offset));
-//                //return (short)(recv_offset);
-//                //ENDBUG
-//                
-//            case OP_PROCESS:
-//                // TODO: check lock
-//                if ( (!lock_enabled) ||
-//                        (lock_ins!= INS_IMPORT_PLAIN_SECRET) ||
-//                        (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
-//                {
-//                    resetLockException();
-//                }
-//
-//                if (bytes_left<2){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);}
-//
-//                // load the new (sensitive) data
-//                buffer_offset = ISO7816.OFFSET_CDATA;
-//                recv_offset = lock_recv_offset;
-//                data_size= Util.getShort(buffer, buffer_offset);
-//                buffer_offset+=2;				
-//                bytes_left-=2;
-//                if (bytes_left<data_size){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//                }
-//
-//                // hash & encrypt data
-//                sha256.update(buffer, buffer_offset, data_size);
-//                try{
-//                    enc_size= om_aes128_ecb.update(buffer, buffer_offset, data_size, recvBuffer, recv_offset);
-//                } catch (ArrayIndexOutOfBoundsException e){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_IMPORTED_DATA_TOO_LONG);}
-//                recv_offset+= enc_size;
-//                lock_data_size+=data_size;
-//
-//                // TODO: ENSURE CONTINUITY OF OPERATIONS BETWEEN MULTIPLE APDU COMMANDS
-//                // Update lock state
-//                //lock_enabled = true;
-//                //lock_ins= INS_IMPORT_PLAIN_SECRET;
-//                lock_lastop= OP_PROCESS;
-//                lock_recv_offset= recv_offset;
-//                return (short)0;
-//
-//            case OP_FINALIZE:
-//                // check lock
-//                if ( (!lock_enabled) || 
-//                        (lock_ins!= INS_IMPORT_PLAIN_SECRET) ||
-//                        (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
-//                {
-//                    resetLockException();
-//                }
-//
-//                if (bytes_left>=2){
-//                    // load the new (sensitive) data
-//                    buffer_offset = ISO7816.OFFSET_CDATA;
-//                    data_size= Util.getShort(buffer, buffer_offset);
-//                    buffer_offset+=2;
-//                    bytes_left-=2;	
-//                }else{
-//                    // no more data
-//                    data_size=(short)0;
-//                }
-//                
-//                // padding
-//                lock_data_size+=data_size;
-//                short padsize= (short) (AES_BLOCKSIZE - (lock_data_size%AES_BLOCKSIZE));
-//                Util.arrayFillNonAtomic(buffer, (short)(buffer_offset+data_size), padsize, (byte)padsize);//padding
-//                
-//                // finalize encrypt data
-//                recv_offset= lock_recv_offset;
-//                try{
-//                    enc_size= om_aes128_ecb.doFinal(buffer, buffer_offset, (short)(data_size+padsize), recvBuffer, recv_offset);
-//                } catch (ArrayIndexOutOfBoundsException e){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_IMPORTED_DATA_TOO_LONG);}
-//                recv_offset+=enc_size;
-//                // finalize hash to fingerprint
-//                sha256.doFinal(buffer, buffer_offset, data_size, buffer, (short)0);
-//                Util.arrayCopyNonAtomic(buffer, (short)0, recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE);
-//                
-//                // save to next available object
-//                // Check if object exists
-//                while (om_secrets.exists(OM_TYPE, om_nextid)){
-//                    om_nextid++;
-//                }
-//                short base= om_secrets.createObject(OM_TYPE, om_nextid, recv_offset);
-//                om_secrets.setObjectData(base, (short)0, recvBuffer, (short)0, recv_offset);
-//                
-//                // log operation
-//                logger.updateLog(INS_IMPORT_PLAIN_SECRET, om_nextid, (short)0, (short)0x9000);
-//                
-//                // Fill the R-APDU buffer
-//                Util.setShort(buffer, (short) 0, om_nextid);
-//                om_nextid++;
-//                Util.arrayCopyNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, buffer, (short)2, SECRET_FINGERPRINT_SIZE);
-//                //DEBUG
-//                //Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)2, recv_offset);
-//                //ENDBUG
-//                
-//                // Release lock
-//                lock_enabled = false;
-//                lock_ins= 0x00;
-//                lock_lastop= 0x00;
-//                lock_recv_offset= 0x00;
-//                lock_data_size= 0x00;
-//                
-//                // Send response
-//                return (short)(2+SECRET_FINGERPRINT_SIZE);
-//                //return (short)(2+recv_offset);//DEBUG
-//
-//            default:
-//                ISOException.throwIt(SW_INCORRECT_P2);
-//        } // switch(op) 
-//
-//        // Send default response
-//        return (short)0;	
-//    }
-
-    /** 
-     * DEPRECATED: use exportSecret() instead.
-     * 
-     * This function exports a secret in plaintext to the host.
-     * Data is encrypted during transport through the Secure Channel
-     * but the host has access to the data in plaintext.
-     * 
-     * ins: 0xA2
-     * p1: 0
-     * p2: operation (Init-Update-Final)
-     * data: [ id(2b) ]
-     * return: 
-     * 		(init):[ id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | fingerprint(4b) | label_size(1b) | label  ]
-     * 		(next):[data_blob_size(2b) | data_blob | sig_size | authentikey_sig]
-     */
-//    private short exportPlainSecret(APDU apdu, byte[] buffer){
-//        // check that PIN[0] has been entered previously
-//        if (!pins[0].isValidated())
-//            ISOException.throwIt(SW_UNAUTHORIZED);
-//        
-//        short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-//        //byte op = buffer[ISO7816.OFFSET_P2];
-//        short buffer_offset = ISO7816.OFFSET_CDATA;
-//        short recv_offset = (short)0;
-//        //short data_size= (short)0;// not used?
-//        short enc_size=(short)0;
-//        short chunk_size=(short)128; // should be multiple of 16 // TODO: make static final
-//        
-//        byte op = buffer[ISO7816.OFFSET_P2];
-//        switch (op) {
-//            case OP_INIT: // first request
-//                // set lock?
-//                lock_enabled = true;
-//                lock_ins= INS_EXPORT_PLAIN_SECRET;
-//                lock_lastop= OP_INIT;
-//                //lock_data_size= (short)0;
-//                lock_data_remaining= (short)0;
-//                lock_recv_offset= (short)0;
-//                
-//                // get id
-//                if (bytes_left<2){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);}
-//                buffer_offset = ISO7816.OFFSET_CDATA;
-//                lock_id= Util.getShort(buffer, ISO7816.OFFSET_CDATA);
-//                
-//                // log operation to be updated later
-//                logger.createLog(INS_EXPORT_PLAIN_SECRET, lock_id, (short)0, (short)0x0000);
-//                
-//                // copy to buffer
-//                short base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
-//                if (base==(short)0xFFFF){
-//                    resetLock();
-//                    ISOException.throwIt(SW_OBJECT_NOT_FOUND);
-//                }
-//                short obj_size= om_secrets.getSizeFromAddress(base);
-//                om_secrets.getObjectData(base, (short)0, recvBuffer, (short)0, obj_size);
-//                // check export rights
-//                if (recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]!=SECRET_EXPORT_ALLOWED){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
-//                }
-//                // update export_nb in object
-//                recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]+=1;
-//                om_secrets.setObjectByte(base, SECRET_OFFSET_EXPORT_NBPLAIN, recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]);
-//                
-//                // copy id & header to buffer
-//                Util.setShort(buffer, (short)0, lock_id);
-//                short label_size= Util.makeShort((byte)0, recvBuffer[SECRET_OFFSET_LABEL_SIZE]);
-//                Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
-//                recv_offset= (short)(SECRET_HEADER_SIZE+label_size);
-//                lock_recv_offset= recv_offset;
-//                lock_data_remaining= (short)(obj_size-recv_offset);
-//                
-//                // initialize cipher & signature for next phases
-//                om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
-//                sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-//                sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
-//                
-//                // the client can recover full public-key from the signature or
-//                // by guessing the compression value () and verifying the signature... 
-//                // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label | sigsize(2) | sig]
-//                return (short)(2+SECRET_HEADER_SIZE+label_size);
-//                
-//            case OP_PROCESS: // following requests
-//                // check lock
-//                if ( (lock_ins!= INS_EXPORT_PLAIN_SECRET) ||
-//                     (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
-//                {
-//                    resetLockException();
-//                }
-//                
-//                // decrypt & export data chunk by chunk
-//                if (lock_data_remaining>chunk_size){
-//                    
-//                    enc_size= om_aes128_ecb.update(recvBuffer, lock_recv_offset, chunk_size, buffer, (short)2);
-//                    Util.setShort(buffer, (short)(0), enc_size);
-//                    lock_recv_offset+= chunk_size;
-//                    //lock_data_size+=enc_size;
-//                    lock_data_remaining-=chunk_size;
-//                    
-//                    // update sign with authentikey
-//                    sigECDSA.update(buffer, (short)2, enc_size);
-//                    
-//                    // buffer= [data_size(2b) | data_chunk]
-//                    return (short)(2+enc_size);
-//                
-//                //finalize last chunk
-//                }else{ 
-//                    
-//                    enc_size= om_aes128_ecb.doFinal(recvBuffer, lock_recv_offset, lock_data_remaining, buffer, (short)2);
-//                    //remove padding
-//                    byte padsize= buffer[(short)(2+enc_size-1)];
-//                    enc_size-=padsize;
-//                    Util.setShort(buffer, (short)(0), enc_size);
-//                    lock_recv_offset+= lock_data_remaining;
-//                    lock_data_remaining=(short)0;
-//                    
-//                    // finalize sign with authentikey
-//                    short sign_size= sigECDSA.sign(buffer, (short)2, enc_size, buffer, (short)(2+enc_size+2));
-//                    Util.setShort(buffer, (short)(2+enc_size), sign_size);
-//                    
-//                    // log operation to be updated later
-//                    logger.updateLog(INS_EXPORT_PLAIN_SECRET, lock_id, (short)0, (short)0x9000);
-//                    
-//                    // update/finalize lock
-//                    Util.arrayFillNonAtomic(recvBuffer, (short)0, lock_recv_offset, (byte)0x00);
-//                    lock_ins= (byte)0x00;
-//                    lock_lastop= (byte)0x00;
-//                    lock_id=(short)0;
-//                    //lock_data_size= (short)0;
-//                    lock_recv_offset=(short)0;
-//                    lock_enabled = false;
-//                    
-//                    // the client can recover full public-key from the signature or
-//                    // by guessing the compression value () and verifying the signature... 
-//                    // buffer= [data_size(2b) | data_chunk | sigsize(2) | sig]
-//                    return (short)(2+enc_size+2+sign_size);                
-//                }
-//            default:
-//                resetLock();
-//                ISOException.throwIt(SW_INCORRECT_P2);
-//        }// end switch   
-//        
-//        return (short)(0); // should never happen
-//    }// end exportPlainSecret
     
     /** 
      * This function imports a secret in plaintext/encrypted from host.
@@ -1941,7 +1553,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         }// end switch   
         
         return (short)(0); // should never happen
-    }// end exportPlainSecret
+    }// end exportSecret
             
     /** 
      * This function list all the objects stored in secure memory
@@ -2533,13 +2145,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         Util.arrayCopyNonAtomic(recvBuffer, (short)33, sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY);
         HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, CST_SC, (short)0, (short)6, recvBuffer, (short)33);
         sc_sessionkey.setKey(recvBuffer,(short)33); // AES-128: 16-bytes key!!       
-        //    	//alternatively: derive session_key (sha256 of coordx)
-        //    	sha256.reset();
-        //    	sha256.doFinal(recvBuffer, (short)1, (short)32, recvBuffer, (short) 0);
-        //    	sc_sessionkey.setKey(recvBuffer,(short)0); // AES-128: 16-bytes key!!
-        //    	//derive mac_key
-        //    	sha256.reset();
-        //    	sha256.doFinal(recvBuffer, (short)0, (short)32, sc_mackey, (short) 0);
 
         //reset IV counter
         Util.arrayFillNonAtomic(sc_buffer, OFFSET_SC_IV, SIZE_SC_IV, (byte) 0);
@@ -2833,13 +2438,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         offset+=(short)32;
         Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, offset, (short)32);
         offset+=(short)32;
-        
-        // DEBUG copy full challenge to buffer
-        //Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, offset);
-        //sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
-        //short sign_size= sigECDSA.sign(recvBuffer, (short)0, offset, buffer, (short)(offset+2));
-        //Util.setShort(buffer, offset, sign_size);
-        
+         
         //sign challenge
         sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
         short sign_size= sigECDSA.sign(recvBuffer, (short)0, offset, buffer, (short)34);
@@ -2849,11 +2448,9 @@ public class SeedKeeper extends javacard.framework.Applet {
         // verify response
         sigECDSA.init(pki_ecpubkey, Signature.MODE_VERIFY);
         boolean is_valid= sigECDSA.verify(recvBuffer, (short)0, offset, buffer, (short)(34), sign_size);
-        //boolean is_valid= sigECDSA.verify(recvBuffer, (short)0, offset, buffer, (short)(offset+2), sign_size);
         if (!is_valid)
             ISOException.throwIt(SW_SIGNATURE_INVALID);
         
-        //return (short)(offset+2+sign_size);
         return (short)(32+2+sign_size);
     }
 
