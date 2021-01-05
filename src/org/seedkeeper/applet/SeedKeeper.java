@@ -150,6 +150,7 @@ public class SeedKeeper extends javacard.framework.Applet {
 
     // SeedKeeper
     private final static byte INS_GENERATE_MASTERSEED= (byte)0xA0;
+    private final static byte INS_GENERATE_2FA_SECRET= (byte)0xAE; 
     private final static byte INS_IMPORT_SECRET= (byte)0xA1;
     private final static byte INS_EXPORT_SECRET= (byte)0xA2;
     //private final static byte INS_IMPORT_PLAIN_SECRET= (byte)0xA1;
@@ -326,11 +327,14 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_TYPE_PUBKEY = (byte) 0x70;
     private final static byte SECRET_TYPE_KEY= (byte) 0x80;
     private final static byte SECRET_TYPE_PASSWORD= (byte) 0x90;
+    private final static byte SECRET_TYPE_CERTIFICATE= (byte) 0xA0;
+    private final static byte SECRET_TYPE_2FA= (byte) 0xB0;
     
     // export controls 
     private final static byte SECRET_EXPORT_ALLOWED = (byte) 0x01; //plain or encrypted
-    private final static byte SECRET_EXPORT_SECUREONLY = (byte) 0x02; // only secure export
-    private final static byte SECRET_EXPORT_FORBIDDEN = (byte) 0x03; // never allowed
+    private final static byte SECRET_EXPORT_SECUREONLY = (byte) 0x02; // only encrypted with authentikey
+    private final static byte SECRET_EXPORT_AUTHENTICATED = (byte) 0x03; // TODO: only encrypted with certified authentikey
+    private final static byte SECRET_EXPORT_FORBIDDEN = (byte) 0x04; // never allowed
     
     // origin
     private final static byte SECRET_ORIGIN_IMPORT_PLAIN= (byte) 0x01; 
@@ -358,6 +362,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte MIN_SEED_SIZE= (byte) 16;
     
     private final static byte AES_BLOCKSIZE= (byte)16;
+    private final static byte SIZE_2FA= (byte)20;
     private static final byte[] SECRET_CST_SC = {'s','e','c','k','e','y', 's','e','c','m','a','c'};
     private byte[] secret_sc_buffer;
     private AESKey secret_sc_sessionkey;
@@ -439,7 +444,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private static final byte SIZE_SC_IV_COUNTER=SIZE_SC_IV-SIZE_SC_IV_RANDOM;
     private static final byte SIZE_SC_BUFFER=SIZE_SC_MACKEY+SIZE_SC_IV;
 
-    private ECPrivateKey bip32_authentikey; // key used to authenticate data
+    //private ECPrivateKey bip32_authentikey; // key used to authenticate data
     
     // additional options
     private short option_flags;
@@ -526,10 +531,10 @@ public class SeedKeeper extends javacard.framework.Applet {
         secret_sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
         
         // authentikey => used to authenticate applet communication
-        bip32_authentikey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-        Secp256k1.setCommonCurveParameters(bip32_authentikey);
-        randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        bip32_authentikey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
+        //bip32_authentikey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        //Secp256k1.setCommonCurveParameters(bip32_authentikey);
+        //randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
+        //bip32_authentikey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
         
         // card label
         card_label= new byte[MAX_CARD_LABEL_SIZE];
@@ -683,6 +688,9 @@ public class SeedKeeper extends javacard.framework.Applet {
                 break;
             case INS_GENERATE_MASTERSEED:
                 sizeout= generateMasterseed(apdu, buffer);
+                break;
+            case INS_GENERATE_2FA_SECRET:
+                sizeout= generate2FASecret(apdu, buffer);
                 break;
             case INS_IMPORT_SECRET:
                 sizeout= importSecret(apdu, buffer);
@@ -1011,6 +1019,83 @@ public class SeedKeeper extends javacard.framework.Applet {
     }
     
     /** 
+     * This function generates a 2FA-secret randomly within the SeedKeeper
+     * 
+     * ins: AE
+     * p1: 0x00
+     * p2: export_rights
+     * data: [ label_size(1b) | label  ]
+     * return: [ id(2b) | fingerprint(4b) ]
+     */
+    private short generate2FASecret(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        // log operation
+        logger.createLog(INS_GENERATE_2FA_SECRET, (short)-1, (short)-1, (short)0x0000);
+        
+        byte export_rights = buffer[ISO7816.OFFSET_P2];
+        if ((export_rights < SECRET_EXPORT_ALLOWED) || (export_rights > SECRET_EXPORT_FORBIDDEN) )
+            ISOException.throwIt(SW_INCORRECT_P2);
+    
+        short buffer_offset = ISO7816.OFFSET_CDATA;
+        short recv_offset = (short)0;
+        short label_size= Util.makeShort((byte) 0x00, buffer[buffer_offset]);
+        buffer_offset++;
+        if (label_size> MAX_LABEL_SIZE)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+    
+        // common data_header: [ type(1b) | origin(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | export_pubkey_counter(1b) | fingerprint(4b) | label_size(1b) | label ]
+        // SECRET_TYPE_2FA: [ size(1b) | 2FA_secret_blob ]
+        recvBuffer[SECRET_OFFSET_TYPE]= SECRET_TYPE_2FA;
+        recvBuffer[SECRET_OFFSET_ORIGIN]= SECRET_ORIGIN_ONCARD;
+        recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]= export_rights;
+        recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
+        recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
+        recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0;
+        recvBuffer[SECRET_OFFSET_RFU1]= (byte)0;
+        recvBuffer[SECRET_OFFSET_RFU2]= (byte)0;
+        recvBuffer[SECRET_OFFSET_LABEL_SIZE]= (byte) (label_size & 0x7f);
+        Util.arrayFillNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE, (byte)0);
+        Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, SECRET_OFFSET_LABEL, label_size);
+        recv_offset= (short) (SECRET_HEADER_SIZE + label_size);
+        
+        // generate seed
+        buffer[(short)0]= SIZE_2FA;
+        randomData.generateData(buffer,(short)(1), SIZE_2FA);
+        //fingerprint
+        sha256.reset();
+        sha256.doFinal(buffer, (short)0, (short)(SIZE_2FA+1), buffer, (short)(SIZE_2FA+1));
+        Util.arrayCopyNonAtomic(buffer, (short)(SIZE_2FA+1), recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE);
+        //pad and encrypt seed for storage 
+        short padsize= (short) (AES_BLOCKSIZE - ((SIZE_2FA+1)%AES_BLOCKSIZE) );
+        Util.arrayFillNonAtomic(buffer, (short)(1+SIZE_2FA), padsize, (byte)padsize);//padding
+        om_aes128_ecb.init(om_encryptkey, Cipher.MODE_ENCRYPT);
+        short enc_size= om_aes128_ecb.doFinal(buffer, (short)0, (short)(1+SIZE_2FA+padsize), recvBuffer, recv_offset);
+        recv_offset+=enc_size; //recv_offset+= SIZE_2FA;
+        
+        // Check if object exists
+        while (om_secrets.exists(OM_TYPE, om_nextid)){
+            om_nextid++;
+        }
+        short base= om_secrets.createObject(OM_TYPE, om_nextid, recv_offset);
+        om_secrets.setObjectData(base, (short)0, recvBuffer, (short)0, recv_offset);
+        
+        // log operation (todo: fill log as soon as available)
+        logger.updateLog(INS_GENERATE_2FA_SECRET, om_nextid, (short)-1, (short)0x9000);
+        
+        // Fill the buffer
+        Util.setShort(buffer, (short) 0, om_nextid);
+        Util.arrayCopyNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, buffer, (short)2, SECRET_FINGERPRINT_SIZE);
+        om_nextid++;
+        
+        // TODO: sign id with authentikey?
+        // Send response
+        return (short)(2+SECRET_FINGERPRINT_SIZE);
+    }
+    
+    /** 
      * This function imports a secret in plaintext/encrypted from host.
      * 
      * ins: 0xA1
@@ -1113,7 +1198,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                         ISOException.throwIt(SW_INVALID_PARAMETER);
                     }
                     // compute shared static key 
-                    keyAgreement.init(bip32_authentikey);        
+                    keyAgreement.init(pki_ecprivkey);        
                     keyAgreement.generateSecret(recvBuffer, (short)(data_offset+1), pubkey_size, recvBuffer, (short)0); //pubkey in uncompressed form
                     // derive secret_sessionkey & secret_mackey
                     HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
@@ -1398,7 +1483,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     }
                     
                     // compute shared static key 
-                    keyAgreement.init(bip32_authentikey);        
+                    keyAgreement.init(pki_ecprivkey);        
                     keyAgreement.generateSecret(recvBuffer, (short)(data_offset+1), (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
                     // derive secret_sessionkey & secret_mackey
                     HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
@@ -1454,7 +1539,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     //secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
                     secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE-1)); //do not hash label & label_size => may be changed during import
                 }else{
-                    sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+                    sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
                     sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
                 }
                 // the client can recover full public-key from the signature or
@@ -2029,12 +2114,12 @@ public class SeedKeeper extends javacard.framework.Applet {
 ////            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 //
 //        // compute the partial authentikey public key...
-//        keyAgreement.init(bip32_authentikey);        
+//        keyAgreement.init(pki_ecprivkey);        
 //        short coordx_size= (short)32;
 //        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
 //        Util.setShort(buffer, (short)0, coordx_size);
 //        // self signed public key
-//        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+//        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
 //        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
 //        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
 //
@@ -2067,12 +2152,12 @@ public class SeedKeeper extends javacard.framework.Applet {
 			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		// compute the partial authentikey public key...
-        keyAgreement.init(bip32_authentikey);        
+        keyAgreement.init(pki_ecprivkey);        
         short coordx_size= (short)32;
     	keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
 		Util.setShort(buffer, (short)0, coordx_size);
         // self signed public key
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
         short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
         Util.setShort(buffer, (short)(coordx_size+2), sign_size);
         
@@ -2158,7 +2243,7 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         // hash signed by authentikey
         short offset= (short)(2+coordx_size+2+sign_size);
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
         short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
         Util.setShort(buffer, offset, sign2_size);
         offset+=(short)(2+sign2_size); 
