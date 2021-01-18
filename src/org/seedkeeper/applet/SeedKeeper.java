@@ -132,7 +132,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
     //private final static byte INS_BIP32_RESET_SEED= (byte) 0x77;
     private final static byte INS_BIP32_GET_AUTHENTIKEY= (byte) 0x73;
-    private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75;
+    //private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75;
     // private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
     // private final static byte INS_BIP32_SET_EXTENDED_PUBKEY= (byte) 0x74;
     // private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
@@ -177,6 +177,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_SET_ALLOWED_CARD_AID = (byte) 0x95;
     //private final static byte INS_GET_ALLOWED_CARD_AID = (byte) 0x96;
     
+    // reset to factory settings
+    private final static byte INS_RESET_TO_FACTORY = (byte) 0xFF;
     
     /****************************************
      *          Error codes                 *
@@ -268,7 +270,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     
     /** For instructions that have been deprecated*/
     private final static short SW_INS_DEPRECATED = (short) 0x9C26;
-
+    /** CARD HAS BEEN RESET TO FACTORY */
+    private final static short SW_RESET_TO_FACTORY = (short) 0xFF00;
     /** For debugging purposes 2 */
     private final static short SW_DEBUG_FLAG = (short) 0x9FFF;
 
@@ -407,6 +410,11 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private Cipher aes128;
     private MessageDigest sha256;
 
+    // reset to factory
+    private byte[] reset_array;
+    private final static byte MAX_RESET_COUNTER= (byte)5;
+    private byte reset_counter=MAX_RESET_COUNTER;
+    
     /*********************************************
      *  BIP32 Hierarchical Deterministic Wallet  *
      *********************************************/
@@ -473,7 +481,14 @@ public class SeedKeeper extends javacard.framework.Applet {
         /* Setting initial PIN n.0 value */
         pins[0] = new OwnerPIN((byte) 3, (byte) PIN_INIT_VALUE.length);
         pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
-
+        
+        // reset to factory
+        try {
+            reset_array = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
+        } catch (SystemException e) {
+            ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
+        }
+        
         // Temporary working arrays
         try {
             tmpBuffer = JCSystem.makeTransientByteArray(TMP_BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
@@ -496,8 +511,10 @@ public class SeedKeeper extends javacard.framework.Applet {
             recvBuffer = new byte[EXT_APDU_BUFFER_SIZE];
         }
 
-        // common cryptographic objects
+        // shared cryptographic objects
         randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+        secret_sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
+        sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);   
         sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false); 
         HmacSha160.init(tmpBuffer);
         try {
@@ -523,7 +540,17 @@ public class SeedKeeper extends javacard.framework.Applet {
         sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
         secret_sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         secret_sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
-         
+        
+        // Secret objects manager
+        om_secrets= new ObjectManager(OM_SIZE);
+        randomData.generateData(recvBuffer, (short)0, (short)16);
+        om_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+        om_encryptkey.setKey(recvBuffer, (short)0); // data must be exactly 16 bytes long
+        om_aes128_ecb= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
+       
+        // logger
+        logger= new Logger(LOGGER_NBRECORDS); 
+        
         // card label
         card_label= new byte[MAX_CARD_LABEL_SIZE];
         
@@ -585,7 +612,31 @@ public class SeedKeeper extends javacard.framework.Applet {
             ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
 
         byte ins = buffer[ISO7816.OFFSET_INS];
-
+        
+        // Reset to factory 
+        //    To trigger reset to factory, user must insert and remove card a fixed number of time, 
+        //    without sending any other command than 1 reset in between
+        if (ins == (byte) INS_RESET_TO_FACTORY){
+            if (reset_array[0]==0){
+                reset_counter--;
+                reset_array[0]=(byte)1;
+            }else{
+                // if INS_RESET_TO_FACTORY is sent after any instruction, the reset process is aborted.
+                reset_counter=MAX_RESET_COUNTER;
+                ISOException.throwIt((short)(SW_RESET_TO_FACTORY + 0xFF));
+            }
+            if (reset_counter== 0) {
+                reset_counter=MAX_RESET_COUNTER;
+                resetToFactory();
+                ISOException.throwIt(SW_RESET_TO_FACTORY);
+            }
+            ISOException.throwIt((short)(SW_RESET_TO_FACTORY + reset_counter));
+        }
+        else{
+            reset_counter=MAX_RESET_COUNTER;
+            reset_array[0]=(byte)1;
+        }
+        
         // prepare APDU buffer
         if (ins != INS_GET_STATUS){
             short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
@@ -667,9 +718,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 break;
             case INS_BIP32_GET_AUTHENTIKEY:
                 sizeout= getBIP32AuthentiKey(apdu, buffer);
-                break;
-            case INS_BIP32_SET_AUTHENTIKEY_PUBKEY:
-                sizeout= setBIP32AuthentikeyPubkey(apdu, buffer);
                 break;
             case INS_GENERATE_MASTERSEED:
                 sizeout= generateMasterseed(apdu, buffer);
@@ -809,7 +857,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        ublk_pins[0] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
+        if (ublk_pins[0]==null)
+            ublk_pins[0] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
         ublk_pins[0].update(buffer, base, numBytes);
 
         base += numBytes;
@@ -823,7 +872,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        pins[1] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
+        if (pins[1]==null)
+            pins[1] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
         pins[1].update(buffer, base, numBytes);
 
         base += numBytes;
@@ -834,7 +884,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        ublk_pins[1] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
+        if (ublk_pins[1]==null)
+            ublk_pins[1] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
         ublk_pins[1].update(buffer, base, numBytes);
         base += numBytes;
         bytesLeft-=numBytes;
@@ -850,20 +901,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         RFU = buffer[base++]; //create_pin_ACL deprecated => RFU
         bytesLeft-=3;
         
-        logger= new Logger(LOGGER_NBRECORDS); // logger
-        logged_ids = 0x0000; // No identities logged in
-
-        om_nextid= (short)0;
-        om_secrets= new ObjectManager(OM_SIZE);
-        randomData.generateData(recvBuffer, (short)0, (short)16);
-        om_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-        om_encryptkey.setKey(recvBuffer, (short)0); // data must be exactly 16 bytes long
-        om_aes128_ecb= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
-        
-        // shared cryptographic objects
-        secret_sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
-        sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
-        
         // parse options
         option_flags=0;
         if (bytesLeft>=2){
@@ -871,7 +908,9 @@ public class SeedKeeper extends javacard.framework.Applet {
             base+=(short)2;
             bytesLeft-=(short)2;
         }
-
+        
+        logged_ids = 0x0000; // No identities logged in
+        om_nextid= (short)0;
         setupDone = true;
         return (short)0;//nothing to return
     }
@@ -910,7 +949,32 @@ public class SeedKeeper extends javacard.framework.Applet {
         // throws exception
         ISOException.throwIt(SW_LOCK_ERROR);
     }
-
+    
+    /** Erase all user data */
+    private boolean resetToFactory(){
+        
+        //TODO        
+        // logs
+        // currently, we do NOT erase logs, but we add an entry for the reset
+        logger.createLog(INS_RESET_TO_FACTORY, (short)-1, (short)-1, (short)0x0000 );
+        
+        // reset all secrets in store
+        om_secrets.resetObjectManager();
+        
+        // reset card label
+        card_label_size=0;
+        Util.arrayFillNonAtomic(card_label, (short)0, (short)card_label.length, (byte)0);
+        
+        // setup
+        pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
+        setupDone=false;
+        
+        // update log
+        logger.updateLog(INS_RESET_TO_FACTORY, (short)-1, (short)-1, (short)0x9000 );
+        
+        return true;
+    }
+    
     /****************************************
      * APDU handlers *
      ****************************************/   

@@ -76,7 +76,18 @@ public class MemoryManager {
 //      // set the pointer to the head node
 //      free_head = (short) 0;
 //  }
-
+    
+    /**
+     * Reset memory
+     * <p>
+     * 
+     * @return true if resetMemory() performed without errors, false otherwise
+     */
+    public boolean resetMemory() {
+        free_head = (short) 0;
+        return true;
+    }
+    
     /**
      * Allocate memory
      * <p>
