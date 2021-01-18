@@ -290,11 +290,6 @@ public class SeedKeeper extends javacard.framework.Applet {
      * Instance variables declaration *
      ****************************************/
 
-    // // Key objects (allocated on demand)
-    // private Key[] eckeys;
-    // private ECPrivateKey tmpkey;
-    // short eckeys_flag=0x0000; //flag bit set to 1 when corresponding key is initialised 
-
     // PIN and PUK objects, allocated on demand
     private OwnerPIN[] pins, ublk_pins;
     
@@ -454,12 +449,11 @@ public class SeedKeeper extends javacard.framework.Applet {
      *********************************************/
     private static final byte[] PKI_CHALLENGE_MSG = {'C','h','a','l','l','e','n','g','e',':'};
     private boolean personalizationDone=false;
-    private ECPrivateKey pki_ecprivkey;
-    private ECPublicKey pki_ecpubkey;
-    private KeyPair pki_eckeypair;
-    //private byte[] pki_ecpubkey_bytes;
-    private short pki_certificate_size=0;
-    private byte[] pki_certificate;
+    private ECPrivateKey authentikey_private;
+    private ECPublicKey authentikey_public;
+    private KeyPair authentikey_pair;
+    private short authentikey_certificate_size=0;
+    private byte[] authentikey_certificate;
     
     /****************************************
      * Methods *
@@ -529,26 +523,17 @@ public class SeedKeeper extends javacard.framework.Applet {
         sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
         secret_sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         secret_sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
-        
-        // authentikey => used to authenticate applet communication
-        //bip32_authentikey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-        //Secp256k1.setCommonCurveParameters(bip32_authentikey);
-        //randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        //bip32_authentikey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        
+         
         // card label
         card_label= new byte[MAX_CARD_LABEL_SIZE];
         
         // perso PKI: generate public/private keypair
-        pki_ecprivkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-        Secp256k1.setCommonCurveParameters(pki_ecprivkey);
-        pki_ecpubkey= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
-        Secp256k1.setCommonCurveParameters(pki_ecprivkey);
-        pki_eckeypair= new KeyPair(pki_ecpubkey, pki_ecprivkey);
-        pki_eckeypair.genKeyPair();
-        //randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        //pki_ecprivkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        //pki_ecpubkey_bytes= new byte[(short)65];
+        authentikey_private= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        Secp256k1.setCommonCurveParameters(authentikey_private);
+        authentikey_public= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
+        Secp256k1.setCommonCurveParameters(authentikey_private);
+        authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
+        authentikey_pair.genKeyPair();
         
         // debug
         register();
@@ -879,9 +864,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         secret_sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
         sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
         
-        // HD wallet
-        //HmacSha512.init(tmpBuffer); // TODO: remove?
-
         // parse options
         option_flags=0;
         if (bytesLeft>=2){
@@ -1194,7 +1176,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                         ISOException.throwIt(SW_INVALID_PARAMETER);
                     }
                     // compute shared static key 
-                    keyAgreement.init(pki_ecprivkey);        
+                    keyAgreement.init(authentikey_private);        
                     keyAgreement.generateSecret(recvBuffer, (short)(data_offset+1), pubkey_size, recvBuffer, (short)0); //pubkey in uncompressed form
                     // derive secret_sessionkey & secret_mackey
                     HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
@@ -1479,7 +1461,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     }
                     
                     // compute shared static key 
-                    keyAgreement.init(pki_ecprivkey);        
+                    keyAgreement.init(authentikey_private);        
                     keyAgreement.generateSecret(recvBuffer, (short)(data_offset+1), (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
                     // derive secret_sessionkey & secret_mackey
                     HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
@@ -1535,7 +1517,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     //secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
                     secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE-1)); //do not hash label & label_size => may be changed during import
                 }else{
-                    sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
+                    sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
                     sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
                 }
                 // the client can recover full public-key from the signature or
@@ -2100,30 +2082,6 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short getBIP32AuthentiKey(APDU apdu, byte[] buffer){
         return getAuthentikey(apdu, buffer);
-        
-//      // check that PIN[0] has been entered previously
-//        if (!pins[0].isValidated())
-//            ISOException.throwIt(SW_UNAUTHORIZED);
-//
-////        // check whether the seed is initialized
-////        if (!bip32_seeded)
-////            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-//
-//        // compute the partial authentikey public key...
-//        keyAgreement.init(pki_ecprivkey);        
-//        short coordx_size= (short)32;
-//        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-//        Util.setShort(buffer, (short)0, coordx_size);
-//        // self signed public key
-//        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
-//        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-//        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
-//
-//        // return x-coordinate of public key+signature
-//        // the client can recover full public-key from the signature or
-//        // by guessing the compression value () and verifying the signature... 
-//        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
-//        return (short)(coordx_size+sign_size+4);
     }
     
     /**
@@ -2147,20 +2105,13 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
-        // compute the partial authentikey public key...
-//        keyAgreement.init(pki_ecprivkey);        
-//        short coordx_size= (short)32;
-//      keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-//      Util.setShort(buffer, (short)0, coordx_size);
-        
         // get the partial authentikey public key...
-        pki_ecpubkey.getW(buffer, (short)1);
+        authentikey_public.getW(buffer, (short)1);
         Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         // self signed public key
-        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
         Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
-        
         
         // return x-coordinate of public key+signature
         // the client can recover full public-key from the signature or
@@ -2169,37 +2120,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         return (short)(BIP32_KEY_SIZE+sign_size+4);
     }
     
-//    /**
-//     * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
-//     * A minimalist API is maintained for backward compatibility.
-//     * 
-//     * This function allows to compute the authentikey pubkey externally and 
-//     * store it in the secure memory cache for future use. 
-//     * This allows to speed up computation during derivation of non-hardened child.
-//     * 
-//     * TODO: remove?
-//     * 
-//     * ins: 0x75
-//     * p1: 
-//     * p2:
-//     * data: [coordx_size(2b) | coordx | sig_size(2b) | sig][coordy_size(2b) | coordy]
-//     *
-//     * returns: none
-//     */
-//    private short setBIP32AuthentikeyPubkey(APDU apdu, byte[] buffer){
-//        // check that PIN[0] has been entered previously
-//        if (!pins[0].isValidated())
-//            ISOException.throwIt(SW_UNAUTHORIZED);
-//        
-//        //TODO: get available memory
-//        short pos=0;
-//        Util.setShort(buffer, pos, (short)0x0000); // number of slot available 
-//        pos += (short) 2;
-//        Util.setShort(buffer, pos, (short)0x0000); // number of slot used 
-//        pos += (short) 2;
-//        return pos;
-//    }// end of setBIP32AuthentikeyPubkey
-
     /**
      * This function allows to initiate a Secure Channel
      *  
@@ -2245,7 +2165,7 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         // hash signed by authentikey
         short offset= (short)(2+BIP32_KEY_SIZE+2+sign_size);
-        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
         Util.setShort(buffer, offset, sign2_size);
         offset+=(short)(2+sign2_size); 
@@ -2344,7 +2264,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (bytesLeft < (short)32)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         
-        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
         return sign_size;
     }
@@ -2363,7 +2283,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
-        pki_ecpubkey.getW(buffer, (short)0); 
+        authentikey_public.getW(buffer, (short)0); 
         return (short)65;
     }
     
@@ -2396,14 +2316,14 @@ public class SeedKeeper extends javacard.framework.Applet {
                 short new_certificate_size=Util.getShort(buffer, buffer_offset);
                 if (new_certificate_size < 0)
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if (pki_certificate==null){
+                if (authentikey_certificate==null){
                     // create array
-                    pki_certificate= new byte[new_certificate_size];
-                    pki_certificate_size=new_certificate_size;
+                    authentikey_certificate= new byte[new_certificate_size];
+                    authentikey_certificate_size=new_certificate_size;
                 }else{
-                    if (new_certificate_size>pki_certificate.length)
+                    if (new_certificate_size>authentikey_certificate.length)
                         ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                    pki_certificate_size=new_certificate_size;
+                    authentikey_certificate_size=new_certificate_size;
                 }
                 break;
                 
@@ -2417,12 +2337,12 @@ public class SeedKeeper extends javacard.framework.Applet {
                 bytesLeft-=4;
                 if (bytesLeft < chunk_size)
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if ((chunk_offset<0) || (chunk_offset>=pki_certificate_size))
+                if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if (((short)(chunk_offset+chunk_size))>pki_certificate_size)
+                if (((short)(chunk_offset+chunk_size))>authentikey_certificate_size)
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 
-                Util.arrayCopyNonAtomic(buffer, buffer_offset, pki_certificate, chunk_offset, chunk_size);
+                Util.arrayCopyNonAtomic(buffer, buffer_offset, authentikey_certificate, chunk_offset, chunk_size);
                 break;
                 
             default:
@@ -2450,7 +2370,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         byte op = buffer[ISO7816.OFFSET_P2];
         switch(op){
             case OP_INIT:
-                Util.setShort(buffer, (short)0, pki_certificate_size);
+                Util.setShort(buffer, (short)0, authentikey_certificate_size);
                 return (short)2; 
                 
             case OP_PROCESS: 
@@ -2463,11 +2383,11 @@ public class SeedKeeper extends javacard.framework.Applet {
                 buffer_offset+=2;
                 short chunk_size= Util.getShort(buffer, buffer_offset);
                 
-                if ((chunk_offset<0) || (chunk_offset>=pki_certificate_size))
+                if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if (((short)(chunk_offset+chunk_size))>pki_certificate_size)
+                if (((short)(chunk_offset+chunk_size))>authentikey_certificate_size)
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                Util.arrayCopyNonAtomic(pki_certificate, chunk_offset, buffer, (short)0, chunk_size);
+                Util.arrayCopyNonAtomic(authentikey_certificate, chunk_offset, buffer, (short)0, chunk_size);
                 return chunk_size; 
                 
             default:
@@ -2527,13 +2447,13 @@ public class SeedKeeper extends javacard.framework.Applet {
         offset+=(short)32;
          
         //sign challenge
-        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign_size= sigECDSA.sign(recvBuffer, (short)0, offset, buffer, (short)34);
         Util.setShort(buffer, (short)32, sign_size);
         Util.arrayCopyNonAtomic(recvBuffer, (short)PKI_CHALLENGE_MSG.length, buffer, (short)0, (short)32);
         
         // verify response
-        sigECDSA.init(pki_ecpubkey, Signature.MODE_VERIFY);
+        sigECDSA.init(authentikey_public, Signature.MODE_VERIFY);
         boolean is_valid= sigECDSA.verify(recvBuffer, (short)0, offset, buffer, (short)(34), sign_size);
         if (!is_valid)
             ISOException.throwIt(SW_SIGNATURE_INVALID);
