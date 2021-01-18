@@ -1,8 +1,8 @@
 /*
  * SatoChip SeedKeeper - Store your seeds on javacard
  * (c) 2020 by Toporin - 16DMCk4WUaHofchAhpMaQS4UPm4urcy2dN
- * Sources available on https://github.com/Toporin					 
- * 					
+ * Sources available on https://github.com/Toporin                   
+ *                  
  *  
  * Based on the M.US.C.L.E framework:
  * see http://pcsclite.alioth.debian.org/musclecard.com/musclecard/
@@ -10,10 +10,10 @@
  * 
  *  MUSCLE SmartCard Development
  *      Authors: Tommaso Cucinotta <cucinotta@sssup.it>
- *	         	 David Corcoran    <corcoran@linuxnet.com>
- *	    Description:      CardEdge implementation with JavaCard
+ *               David Corcoran    <corcoran@linuxnet.com>
+ *      Description:      CardEdge implementation with JavaCard
  *      Protocol Authors: Tommaso Cucinotta <cucinotta@sssup.it>
- *		                  David Corcoran <corcoran@linuxnet.com>
+ *                        David Corcoran <corcoran@linuxnet.com>
  *      
  * BEGIN LICENSE BLOCK
  * Copyright (C) 1999-2002 David Corcoran <corcoran@linuxnet.com>
@@ -80,7 +80,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 1;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 1;
+    private final static byte APPLET_MINOR_VERSION = (byte) 1;   
 
     // Maximum number of keys handled by the Cardlet
     //private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -112,9 +112,9 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte INS_SETUP = (byte) 0x2A;
 
     // Keys' use and management
-    //	private final static byte INS_IMPORT_KEY = (byte) 0x32;
-    //	private final static byte INS_RESET_KEY = (byte) 0x33;
-    //	private final static byte INS_GET_PUBLIC_FROM_PRIVATE= (byte)0x35;
+    // private final static byte INS_IMPORT_KEY = (byte) 0x32;
+    // private final static byte INS_RESET_KEY = (byte) 0x33;
+    // private final static byte INS_GET_PUBLIC_FROM_PRIVATE= (byte)0x35;
 
     // External authentication
     private final static byte INS_CREATE_PIN = (byte) 0x40; //TODO: remove?
@@ -133,16 +133,16 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_BIP32_RESET_SEED= (byte) 0x77;
     private final static byte INS_BIP32_GET_AUTHENTIKEY= (byte) 0x73;
     private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75;
-    //	private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
-    //	private final static byte INS_BIP32_SET_EXTENDED_PUBKEY= (byte) 0x74;
-    //	private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
-    //	private final static byte INS_SIGN_SHORT_MESSAGE= (byte) 0x72;
-    //	private final static byte INS_SIGN_TRANSACTION= (byte) 0x6F;
-    //	private final static byte INS_PARSE_TRANSACTION = (byte) 0x71;
-    //  private final static byte INS_CRYPT_TRANSACTION_2FA = (byte) 0x76;
-    //  private final static byte INS_SET_2FA_KEY = (byte) 0x79;    
-    //  private final static byte INS_RESET_2FA_KEY = (byte) 0x78;
-    //  private final static byte INS_SIGN_TRANSACTION_HASH= (byte) 0x7A;
+    // private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
+    // private final static byte INS_BIP32_SET_EXTENDED_PUBKEY= (byte) 0x74;
+    // private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
+    // private final static byte INS_SIGN_SHORT_MESSAGE= (byte) 0x72;
+    // private final static byte INS_SIGN_TRANSACTION= (byte) 0x6F;
+    // private final static byte INS_PARSE_TRANSACTION = (byte) 0x71;
+    // private final static byte INS_CRYPT_TRANSACTION_2FA = (byte) 0x76;
+    // private final static byte INS_SET_2FA_KEY = (byte) 0x79;    
+    // private final static byte INS_RESET_2FA_KEY = (byte) 0x78;
+    // private final static byte INS_SIGN_TRANSACTION_HASH= (byte) 0x7A;
 
     // secure channel
     private final static byte INS_INIT_SECURE_CHANNEL = (byte) 0x81;
@@ -162,9 +162,9 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_IMPORT_SHAMIR_SHARED_SECRET= (byte)0xA7;
     //private final static byte INS_EXPORT_SHAMIR_SHARED_SECRET= (byte)0xA8;
     private final static byte INS_PRINT_LOGS= (byte)0xA9;
-	private final static byte INS_EXPORT_AUTHENTIKEY= (byte) 0xAD;
-	
-	// Personalization PKI support
+    private final static byte INS_EXPORT_AUTHENTIKEY= (byte) 0xAD;
+    
+    // Personalization PKI support
     private final static byte INS_IMPORT_PKI_CERTIFICATE = (byte) 0x92;
     private final static byte INS_EXPORT_PKI_CERTIFICATE = (byte) 0x93;
     private final static byte INS_SIGN_PKI_CSR = (byte) 0x94;
@@ -176,8 +176,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_VERIFY_PKI_KEYPAIR = (byte) 0x97;
     //private final static byte INS_SET_ALLOWED_CARD_AID = (byte) 0x95;
     //private final static byte INS_GET_ALLOWED_CARD_AID = (byte) 0x96;
-	
-	
+    
+    
     /****************************************
      *          Error codes                 *
      ****************************************/
@@ -215,8 +215,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     /** Invalid input parameter to command */
     private final static short SW_INVALID_PARAMETER = (short) 0x9C0F;
 
-    //	/** Eckeys initialized */
-    //	private final static short SW_ECKEYS_INITIALIZED_KEY = (short) 0x9C1A;
+    // /** Eckeys initialized */
+    // private final static short SW_ECKEYS_INITIALIZED_KEY = (short) 0x9C1A;
 
     /** Verify operation detected an invalid signature */
     private final static short SW_SIGNATURE_INVALID = (short) 0x9C0B;
@@ -224,22 +224,22 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static short SW_IDENTITY_BLOCKED = (short) 0x9C0C;
     /** For debugging purposes */
     private final static short SW_INTERNAL_ERROR = (short) 0x9CFF;
-    //	/** Very low probability error */
-    //	private final static short SW_BIP32_DERIVATION_ERROR = (short) 0x9C0E;
-    //	/** Incorrect initialization of method */
+    // /** Very low probability error */
+    // private final static short SW_BIP32_DERIVATION_ERROR = (short) 0x9C0E;
+    // /** Incorrect initialization of method */
     private final static short SW_INCORRECT_INITIALIZATION = (short) 0x9C13;
     /** Bip32 seed is not initialized => this is actually the authentikey*/
     private final static short SW_BIP32_UNINITIALIZED_SEED = (short) 0x9C14;
-    //	/** Bip32 seed is already initialized (must be reset before change)*/
-    //	private final static short SW_BIP32_INITIALIZED_SEED = (short) 0x9C17;
+    // /** Bip32 seed is already initialized (must be reset before change)*/
+    // private final static short SW_BIP32_INITIALIZED_SEED = (short) 0x9C17;
     //** DEPRECATED - Bip32 authentikey pubkey is not initialized*/
     //private final static short SW_BIP32_UNINITIALIZED_AUTHENTIKEY_PUBKEY= (short) 0x9C16;
-    //	/** Incorrect transaction hash */
-    //	private final static short SW_INCORRECT_TXHASH = (short) 0x9C15;
-    //	/** 2FA already initialized*/
-    //	private final static short SW_2FA_INITIALIZED_KEY = (short) 0x9C18;
-    //	/** 2FA uninitialized*/
-    //	private final static short SW_2FA_UNINITIALIZED_KEY = (short) 0x9C19;
+    // /** Incorrect transaction hash */
+    // private final static short SW_INCORRECT_TXHASH = (short) 0x9C15;
+    // /** 2FA already initialized*/
+    // private final static short SW_2FA_INITIALIZED_KEY = (short) 0x9C18;
+    // /** 2FA uninitialized*/
+    // private final static short SW_2FA_UNINITIALIZED_KEY = (short) 0x9C19;
     
     /** Lock error**/
     private final static short SW_LOCK_ERROR= (short) 0x9C30;
@@ -290,10 +290,10 @@ public class SeedKeeper extends javacard.framework.Applet {
      * Instance variables declaration *
      ****************************************/
 
-    //	// Key objects (allocated on demand)
-    //	private Key[] eckeys;
-    //	private ECPrivateKey tmpkey;
-    //	short eckeys_flag=0x0000; //flag bit set to 1 when corresponding key is initialised 
+    // // Key objects (allocated on demand)
+    // private Key[] eckeys;
+    // private ECPrivateKey tmpkey;
+    // short eckeys_flag=0x0000; //flag bit set to 1 when corresponding key is initialised 
 
     // PIN and PUK objects, allocated on demand
     private OwnerPIN[] pins, ublk_pins;
@@ -420,7 +420,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
     private static final byte[] BITCOIN_SEED2 = {'B','i','t','c','o','i','n',' ','s','e','e','d','2'};
     private static final short BIP32_KEY_SIZE= 32; // size of extended key and chain code is 256 bits
-    //	private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
+    // private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
 
     /*********************************************
      *        Other data instances               *
@@ -457,7 +457,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private ECPrivateKey pki_ecprivkey;
     private ECPublicKey pki_ecpubkey;
     private KeyPair pki_eckeypair;
-    private byte[] pki_ecpubkey_bytes;
+    //private byte[] pki_ecpubkey_bytes;
     private short pki_certificate_size=0;
     private byte[] pki_certificate;
     
@@ -625,7 +625,7 @@ public class SeedKeeper extends javacard.framework.Applet {
             sizeout= ProcessSecureChannel(apdu, buffer);
             //todo: check if sizeout and buffer[ISO7816.OFFSET_LC] matches...
             //if sizeout>4, buffer[ISO7816.OFFSET_LC] should be equal to (sizeout-5)
-            //todo: remove padding ? (it is actually not used)			
+            //todo: remove padding ? (it is actually not used)          
         }
         else if (needs_secure_channel){
             ISOException.throwIt(SW_SECURE_CHANNEL_REQUIRED);
@@ -708,7 +708,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 sizeout= printLogs(apdu, buffer);
                 break;
             case INS_EXPORT_AUTHENTIKEY:
-                sizeout= exportAuthentikey(apdu, buffer);
+                sizeout= getAuthentikey(apdu, buffer);
                 break;    
             //PKI
             case INS_EXPORT_PKI_PUBKEY:
@@ -777,10 +777,10 @@ public class SeedKeeper extends javacard.framework.Applet {
      *        option_flags(2b - RFU) | 
      *        ]
      * where: 
-     * 		default_pin: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30};
-     * 		pin_tries: max number of PIN try allowed before the corresponding PIN is blocked
-     * 		ublk_tries:  max number of UBLK(unblock) try allowed before the PUK is blocked
-     * 		option_flags: flags to define up to 16 additional options		
+     *      default_pin: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30};
+     *      pin_tries: max number of PIN try allowed before the corresponding PIN is blocked
+     *      ublk_tries:  max number of UBLK(unblock) try allowed before the PUK is blocked
+     *      option_flags: flags to define up to 16 additional options       
      * return: none
      */
     private short setup(APDU apdu, byte[] buffer) {
@@ -796,7 +796,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        byte triesRemaining	= pin.getTriesRemaining();
+        byte triesRemaining = pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, base, numBytes))
@@ -931,11 +931,7 @@ public class SeedKeeper extends javacard.framework.Applet {
 
     /****************************************
      * APDU handlers *
-     ****************************************/	
-
-    /****************************************
-     * APDU handlers *
-     ****************************************/	
+     ****************************************/   
     
     /** 
      * This function generates a master seed randomly within the SeedKeeper
@@ -1823,7 +1819,7 @@ public class SeedKeeper extends javacard.framework.Applet {
          */
         if (!CheckPINPolicy(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft))
             ISOException.throwIt(SW_INVALID_PARAMETER);
-        byte triesRemaining	= pin.getTriesRemaining();
+        byte triesRemaining = pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) ISO7816.OFFSET_CDATA, (byte) bytesLeft)) {
@@ -1877,7 +1873,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, (short) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1), new_pin_size))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        byte triesRemaining	= pin.getTriesRemaining();
+        byte triesRemaining = pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size)) {
@@ -1926,7 +1922,7 @@ public class SeedKeeper extends javacard.framework.Applet {
          */
         if (!CheckPINPolicy(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft))
             ISOException.throwIt(SW_INVALID_PARAMETER);
-        byte triesRemaining	= ublk_pin.getTriesRemaining();
+        byte triesRemaining = ublk_pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!ublk_pin.check(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft)){
@@ -1987,7 +1983,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     /**
      * This function retrieves general information about the Applet running on the smart
      * card, and useful information about the status of current session such as:
-     * 		- applet version (4b)
+     *      - applet version (4b)
      *  
      *  ins: 0x3C
      *  p1: 0x00 
@@ -1998,7 +1994,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private short GetStatus(APDU apdu, byte[] buffer) {
         // check that PIN[0] has been entered previously
         //if (!pins[0].isValidated())
-        //	ISOException.throwIt(SW_UNAUTHORIZED);
+        // ISOException.throwIt(SW_UNAUTHORIZED);
 
         if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
             ISOException.throwIt(SW_INCORRECT_P1);
@@ -2103,9 +2099,9 @@ public class SeedKeeper extends javacard.framework.Applet {
      *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
      */
     private short getBIP32AuthentiKey(APDU apdu, byte[] buffer){
-        return exportAuthentikey(apdu, buffer);
+        return getAuthentikey(apdu, buffer);
         
-//    	// check that PIN[0] has been entered previously
+//      // check that PIN[0] has been entered previously
 //        if (!pins[0].isValidated())
 //            ISOException.throwIt(SW_UNAUTHORIZED);
 //
@@ -2131,71 +2127,78 @@ public class SeedKeeper extends javacard.framework.Applet {
     }
     
     /**
-	 * This function returns the authentikey public key.
-	 * The function returns the x-coordinate of the authentikey, self-signed.
-	 * The authentikey full public key can be recovered from the signature.
-	 * 
-	 * Compared to getBIP32AuthentiKey(), this method returns the Authentikey even if the card is not seeded.
-	 * For SeedKeeper encrypted seed import, we use the authentikey as a Trusted Pubkey for the ECDH key exchange, 
-	 * thus the authentikey must be available before the Satochip is seeded. 
-	 * Before a seed is available, the authentiey is generated oncard randomly in the constructor
-	 * 
-	 *  ins: 0xAD
-	 *  p1: 0x00 
-	 *  p2: 0x00 
-	 *  data: none
-	 *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
-	 */
-	private short exportAuthentikey(APDU apdu, byte[] buffer){
-		// check that PIN[0] has been entered previously
-		if (!pins[0].isValidated())
-			ISOException.throwIt(SW_UNAUTHORIZED);
-		
-		// compute the partial authentikey public key...
-        keyAgreement.init(pki_ecprivkey);        
-        short coordx_size= (short)32;
-    	keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-		Util.setShort(buffer, (short)0, coordx_size);
+     * This function returns the authentikey public key.
+     * The function returns the x-coordinate of the authentikey, self-signed.
+     * The authentikey full public key can be recovered from the signature.
+     * 
+     * Compared to getBIP32AuthentiKey(), this method returns the Authentikey even if the card is not seeded.
+     * For SeedKeeper encrypted seed import, we use the authentikey as a Trusted Pubkey for the ECDH key exchange, 
+     * thus the authentikey must be available before the Satochip is seeded. 
+     * Before a seed is available, the authentiey is generated oncard randomly in the constructor
+     * 
+     *  ins: 0xAD
+     *  p1: 0x00 
+     *  p2: 0x00 
+     *  data: none
+     *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
+     */
+    private short getAuthentikey(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        // compute the partial authentikey public key...
+//        keyAgreement.init(pki_ecprivkey);        
+//        short coordx_size= (short)32;
+//      keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+//      Util.setShort(buffer, (short)0, coordx_size);
+        
+        // get the partial authentikey public key...
+        pki_ecpubkey.getW(buffer, (short)1);
+        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         // self signed public key
         sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
+        
         
         // return x-coordinate of public key+signature
         // the client can recover full public-key from the signature or
         // by guessing the compression value () and verifying the signature... 
         // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
-        return (short)(coordx_size+sign_size+4);
-	}
+        return (short)(BIP32_KEY_SIZE+sign_size+4);
+    }
     
-    /**
-     * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
-     * A minimalist API is maintained for backward compatibility.
-     * 
-     * This function allows to compute the authentikey pubkey externally and 
-     * store it in the secure memory cache for future use. 
-     * This allows to speed up computation during derivation of non-hardened child.
-     * 
-     * ins: 0x75
-     * p1: 
-     * p2:
-     * data: [coordx_size(2b) | coordx | sig_size(2b) | sig][coordy_size(2b) | coordy]
-     *
-     * returns: none
-     */
-    private short setBIP32AuthentikeyPubkey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        //TODO: get available memory
-        short pos=0;
-        Util.setShort(buffer, pos, (short)0x0000); // number of slot available 
-        pos += (short) 2;
-        Util.setShort(buffer, pos, (short)0x0000); // number of slot used 
-        pos += (short) 2;
-        return pos;
-    }// end of setBIP32AuthentikeyPubkey
+//    /**
+//     * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
+//     * A minimalist API is maintained for backward compatibility.
+//     * 
+//     * This function allows to compute the authentikey pubkey externally and 
+//     * store it in the secure memory cache for future use. 
+//     * This allows to speed up computation during derivation of non-hardened child.
+//     * 
+//     * TODO: remove?
+//     * 
+//     * ins: 0x75
+//     * p1: 
+//     * p2:
+//     * data: [coordx_size(2b) | coordx | sig_size(2b) | sig][coordy_size(2b) | coordy]
+//     *
+//     * returns: none
+//     */
+//    private short setBIP32AuthentikeyPubkey(APDU apdu, byte[] buffer){
+//        // check that PIN[0] has been entered previously
+//        if (!pins[0].isValidated())
+//            ISOException.throwIt(SW_UNAUTHORIZED);
+//        
+//        //TODO: get available memory
+//        short pos=0;
+//        Util.setShort(buffer, pos, (short)0x0000); // number of slot available 
+//        pos += (short) 2;
+//        Util.setShort(buffer, pos, (short)0x0000); // number of slot used 
+//        pos += (short) 2;
+//        return pos;
+//    }// end of setBIP32AuthentikeyPubkey
 
     /**
      * This function allows to initiate a Secure Channel
@@ -2223,7 +2226,6 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         // compute the shared secret...
         keyAgreement.init(sc_ephemeralkey);        
-        short coordx_size= (short)32;
         keyAgreement.generateSecret(buffer, ISO7816.OFFSET_CDATA, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
         // derive sc_sessionkey & sc_mackey
         HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, CST_SC, (short)6, (short)6, recvBuffer, (short)33);
@@ -2236,13 +2238,13 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         // self signed ephemeral pubkey
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, coordx_size);
+        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         sigECDSA.init(sc_ephemeralkey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
 
         // hash signed by authentikey
-        short offset= (short)(2+coordx_size+2+sign_size);
+        short offset= (short)(2+BIP32_KEY_SIZE+2+sign_size);
         sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
         short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
         Util.setShort(buffer, offset, sign2_size);
