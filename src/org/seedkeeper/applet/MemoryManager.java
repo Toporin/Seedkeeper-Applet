@@ -37,18 +37,22 @@ public class MemoryManager {
     // Of List
     private final static byte NODE_SIZE = (byte) 4;
 
+    // memoryManager size: should not change once set
+    private final short MEM_SIZE; 
     // All the available memory as a byte array
     private byte ptr[] = null;
     // Free memory list
     private short free_head = NULL_OFFSET;
 
+    
     /**
      * Constructor for the MemoryManager class
      * 
      * @param mem_size
      *            Size of the memory are to be allocated
      */
-    public MemoryManager(short mem_size) {
+    public MemoryManager(final short mem_size) {
+        MEM_SIZE=mem_size;
         //Init(mem_size);
         if (ptr != null)
             return;
@@ -83,7 +87,15 @@ public class MemoryManager {
      * 
      * @return true if resetMemory() performed without errors, false otherwise
      */
-    public boolean resetMemory() {
+    public boolean resetMemory(boolean secure_erase) {
+        // reset memory
+        if (secure_erase)
+            Util.arrayFillNonAtomic(ptr, (short)0, (short)ptr.length, (byte) 0x00);
+        // set the size
+        Util.setShort(ptr, (short) 0, MEM_SIZE);
+        // set the pointer to EndOfList
+        Util.setShort(ptr, (short) 2, NULL_OFFSET);
+        // set the pointer to the head node
         free_head = (short) 0;
         return true;
     }

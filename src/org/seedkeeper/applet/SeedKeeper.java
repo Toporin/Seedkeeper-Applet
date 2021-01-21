@@ -959,7 +959,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         logger.createLog(INS_RESET_TO_FACTORY, (short)-1, (short)-1, (short)0x0000 );
         
         // reset all secrets in store
-        om_secrets.resetObjectManager();
+        om_secrets.resetObjectManager(true);
         
         // reset card label
         card_label_size=0;
@@ -1543,6 +1543,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 short base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
                 if (base==(short)0xFFFF){
                     resetLock();
+                    logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_OBJECT_NOT_FOUND);
                     ISOException.throwIt(SW_OBJECT_NOT_FOUND);
                 }
                 short obj_size= om_secrets.getSizeFromAddress(base);
@@ -1552,6 +1553,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     // check export rights
                     if (recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]!=SECRET_EXPORT_ALLOWED){
                         resetLock();
+                        logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_EXPORT_NOT_ALLOWED);
                         ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
                     }
                     recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]+=1; 
@@ -1598,7 +1600,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 if ( (lock_ins!= INS_EXPORT_SECRET) ||
                      (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
                 {
-                    resetLockException();
+                    resetLockException(); //TODO: log error?
                 }
                 
                 // decrypt & export data chunk by chunk

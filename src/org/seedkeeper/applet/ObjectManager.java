@@ -93,8 +93,8 @@ public class ObjectManager {
      * @return The memory base address for the object. It can be used in
      *         successive calls to xxxFromAddress() methods.
      */
-    public boolean resetObjectManager() {
-        mem.resetMemory();
+    public boolean resetObjectManager(boolean secure_erase) {
+        mem.resetMemory(secure_erase);
         obj_list_head = MemoryManager.NULL_OFFSET;
         return true;
     }
