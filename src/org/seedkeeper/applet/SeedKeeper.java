@@ -58,7 +58,7 @@ import javacard.security.CryptoException;
 import javacard.security.Key;
 import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
-import javacard.security.KeyPair;
+//import javacard.security.KeyPair;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
 import javacard.security.RandomData;
@@ -459,7 +459,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private boolean personalizationDone=false;
     private ECPrivateKey authentikey_private;
     private ECPublicKey authentikey_public;
-    private KeyPair authentikey_pair;
+    //private KeyPair authentikey_pair;
     private short authentikey_certificate_size=0;
     private byte[] authentikey_certificate;
     
@@ -559,8 +559,13 @@ public class SeedKeeper extends javacard.framework.Applet {
         Secp256k1.setCommonCurveParameters(authentikey_private);
         authentikey_public= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
         Secp256k1.setCommonCurveParameters(authentikey_private);
-        authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
-        authentikey_pair.genKeyPair();
+        //authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
+        //authentikey_pair.genKeyPair();
+        randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
+        authentikey_private.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
+        keyAgreement.init(authentikey_private);   
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form => silently fail after cap loaded
+        authentikey_public.setW(recvBuffer, (short)0, (short)65);
         
         // debug
         register();
