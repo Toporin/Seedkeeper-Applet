@@ -84,6 +84,20 @@ public class ObjectManager {
         mem= new MemoryManager(mem_size);
         obj_list_head = MemoryManager.NULL_OFFSET;
     }
+    
+    /**
+     * Creates an object with specified parameters. Throws a SW_NO_MEMORY_LEFT
+     * exception if cannot allocate the memory. Does not check if object exists.
+     * 
+     * 
+     * @return The memory base address for the object. It can be used in
+     *         successive calls to xxxFromAddress() methods.
+     */
+    public boolean resetObjectManager(boolean secure_erase) {
+        mem.resetMemory(secure_erase);
+        obj_list_head = MemoryManager.NULL_OFFSET;
+        return true;
+    }
 
     /**
      * Creates an object with specified parameters. Throws a SW_NO_MEMORY_LEFT
@@ -93,10 +107,6 @@ public class ObjectManager {
      *            Object Type
      * @param id
      *            Object ID (Type and ID form a generic 4 bytes identifier)
-     * @param acl_buf
-     *            Java byte array containing the ACL for the new object
-     * @param acl_offset
-     *            Offset at which the ACL starts in acl_buf[]
      * @return The memory base address for the object. It can be used in
      *         successive calls to xxxFromAddress() methods.
      */

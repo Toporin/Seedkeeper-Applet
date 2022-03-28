@@ -1,8 +1,8 @@
 /*
  * SatoChip SeedKeeper - Store your seeds on javacard
  * (c) 2020 by Toporin - 16DMCk4WUaHofchAhpMaQS4UPm4urcy2dN
- * Sources available on https://github.com/Toporin					 
- * 					
+ * Sources available on https://github.com/Toporin                   
+ *                  
  *  
  * Based on the M.US.C.L.E framework:
  * see http://pcsclite.alioth.debian.org/musclecard.com/musclecard/
@@ -10,10 +10,10 @@
  * 
  *  MUSCLE SmartCard Development
  *      Authors: Tommaso Cucinotta <cucinotta@sssup.it>
- *	         	 David Corcoran    <corcoran@linuxnet.com>
- *	    Description:      CardEdge implementation with JavaCard
+ *               David Corcoran    <corcoran@linuxnet.com>
+ *      Description:      CardEdge implementation with JavaCard
  *      Protocol Authors: Tommaso Cucinotta <cucinotta@sssup.it>
- *		                  David Corcoran <corcoran@linuxnet.com>
+ *                        David Corcoran <corcoran@linuxnet.com>
  *      
  * BEGIN LICENSE BLOCK
  * Copyright (C) 1999-2002 David Corcoran <corcoran@linuxnet.com>
@@ -45,8 +45,6 @@
 package org.seedkeeper.applet;
 
 import javacard.framework.APDU;
-//import javacard.framework.CardRuntimeException;
-import java.lang.ArrayIndexOutOfBoundsException;
 import javacard.framework.ISO7816;
 import javacard.framework.ISOException;
 import javacard.framework.JCSystem;
@@ -60,6 +58,7 @@ import javacard.security.CryptoException;
 import javacard.security.Key;
 import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
+//import javacard.security.KeyPair;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
 import javacard.security.RandomData;
@@ -81,7 +80,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 1;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 1;
+    private final static byte APPLET_MINOR_VERSION = (byte) 1;   
 
     // Maximum number of keys handled by the Cardlet
     //private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -113,9 +112,9 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte INS_SETUP = (byte) 0x2A;
 
     // Keys' use and management
-    //	private final static byte INS_IMPORT_KEY = (byte) 0x32;
-    //	private final static byte INS_RESET_KEY = (byte) 0x33;
-    //	private final static byte INS_GET_PUBLIC_FROM_PRIVATE= (byte)0x35;
+    // private final static byte INS_IMPORT_KEY = (byte) 0x32;
+    // private final static byte INS_RESET_KEY = (byte) 0x33;
+    // private final static byte INS_GET_PUBLIC_FROM_PRIVATE= (byte)0x35;
 
     // External authentication
     private final static byte INS_CREATE_PIN = (byte) 0x40; //TODO: remove?
@@ -133,17 +132,17 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
     //private final static byte INS_BIP32_RESET_SEED= (byte) 0x77;
     private final static byte INS_BIP32_GET_AUTHENTIKEY= (byte) 0x73;
-    private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75;
-    //	private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
-    //	private final static byte INS_BIP32_SET_EXTENDED_PUBKEY= (byte) 0x74;
-    //	private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
-    //	private final static byte INS_SIGN_SHORT_MESSAGE= (byte) 0x72;
-    //	private final static byte INS_SIGN_TRANSACTION= (byte) 0x6F;
-    //	private final static byte INS_PARSE_TRANSACTION = (byte) 0x71;
-    //  private final static byte INS_CRYPT_TRANSACTION_2FA = (byte) 0x76;
-    //  private final static byte INS_SET_2FA_KEY = (byte) 0x79;    
-    //  private final static byte INS_RESET_2FA_KEY = (byte) 0x78;
-    //  private final static byte INS_SIGN_TRANSACTION_HASH= (byte) 0x7A;
+    //private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75;
+    // private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
+    // private final static byte INS_BIP32_SET_EXTENDED_PUBKEY= (byte) 0x74;
+    // private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
+    // private final static byte INS_SIGN_SHORT_MESSAGE= (byte) 0x72;
+    // private final static byte INS_SIGN_TRANSACTION= (byte) 0x6F;
+    // private final static byte INS_PARSE_TRANSACTION = (byte) 0x71;
+    // private final static byte INS_CRYPT_TRANSACTION_2FA = (byte) 0x76;
+    // private final static byte INS_SET_2FA_KEY = (byte) 0x79;    
+    // private final static byte INS_RESET_2FA_KEY = (byte) 0x78;
+    // private final static byte INS_SIGN_TRANSACTION_HASH= (byte) 0x7A;
 
     // secure channel
     private final static byte INS_INIT_SECURE_CHANNEL = (byte) 0x81;
@@ -151,6 +150,7 @@ public class SeedKeeper extends javacard.framework.Applet {
 
     // SeedKeeper
     private final static byte INS_GENERATE_MASTERSEED= (byte)0xA0;
+    private final static byte INS_GENERATE_2FA_SECRET= (byte)0xAE; 
     private final static byte INS_IMPORT_SECRET= (byte)0xA1;
     private final static byte INS_EXPORT_SECRET= (byte)0xA2;
     //private final static byte INS_IMPORT_PLAIN_SECRET= (byte)0xA1;
@@ -162,8 +162,24 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_IMPORT_SHAMIR_SHARED_SECRET= (byte)0xA7;
     //private final static byte INS_EXPORT_SHAMIR_SHARED_SECRET= (byte)0xA8;
     private final static byte INS_PRINT_LOGS= (byte)0xA9;
-	private final static byte INS_EXPORT_AUTHENTIKEY= (byte) 0xAD;
-	
+    private final static byte INS_EXPORT_AUTHENTIKEY= (byte) 0xAD;
+    
+    // Personalization PKI support
+    private final static byte INS_IMPORT_PKI_CERTIFICATE = (byte) 0x92;
+    private final static byte INS_EXPORT_PKI_CERTIFICATE = (byte) 0x93;
+    private final static byte INS_SIGN_PKI_CSR = (byte) 0x94;
+    private final static byte INS_EXPORT_PKI_PUBKEY = (byte) 0x98;
+    private final static byte INS_LOCK_PKI = (byte) 0x99;
+    private final static byte INS_CHALLENGE_RESPONSE_PKI= (byte) 0x9A;
+    //private final static byte INS_IMPORT_PKI_PUBKEY = (byte) 0x90;
+    //private final static byte INS_IMPORT_PKI_PRIVKEY = (byte) 0x91;
+    //private final static byte INS_VERIFY_PKI_KEYPAIR = (byte) 0x97;
+    //private final static byte INS_SET_ALLOWED_CARD_AID = (byte) 0x95;
+    //private final static byte INS_GET_ALLOWED_CARD_AID = (byte) 0x96;
+    
+    // reset to factory settings
+    private final static byte INS_RESET_TO_FACTORY = (byte) 0xFF;
+    
     /****************************************
      *          Error codes                 *
      ****************************************/
@@ -201,8 +217,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     /** Invalid input parameter to command */
     private final static short SW_INVALID_PARAMETER = (short) 0x9C0F;
 
-    //	/** Eckeys initialized */
-    //	private final static short SW_ECKEYS_INITIALIZED_KEY = (short) 0x9C1A;
+    // /** Eckeys initialized */
+    // private final static short SW_ECKEYS_INITIALIZED_KEY = (short) 0x9C1A;
 
     /** Verify operation detected an invalid signature */
     private final static short SW_SIGNATURE_INVALID = (short) 0x9C0B;
@@ -210,23 +226,22 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static short SW_IDENTITY_BLOCKED = (short) 0x9C0C;
     /** For debugging purposes */
     private final static short SW_INTERNAL_ERROR = (short) 0x9CFF;
-    //	/** Very low probability error */
-    //	private final static short SW_BIP32_DERIVATION_ERROR = (short) 0x9C0E;
-    //	/** Incorrect initialization of method */
+    // /** Very low probability error */
+    // private final static short SW_BIP32_DERIVATION_ERROR = (short) 0x9C0E;
+    // /** Incorrect initialization of method */
     private final static short SW_INCORRECT_INITIALIZATION = (short) 0x9C13;
     /** Bip32 seed is not initialized => this is actually the authentikey*/
     private final static short SW_BIP32_UNINITIALIZED_SEED = (short) 0x9C14;
-    //	/** Bip32 seed is already initialized (must be reset before change)*/
-    //	private final static short SW_BIP32_INITIALIZED_SEED = (short) 0x9C17;
+    // /** Bip32 seed is already initialized (must be reset before change)*/
+    // private final static short SW_BIP32_INITIALIZED_SEED = (short) 0x9C17;
     //** DEPRECATED - Bip32 authentikey pubkey is not initialized*/
     //private final static short SW_BIP32_UNINITIALIZED_AUTHENTIKEY_PUBKEY= (short) 0x9C16;
-    //	/** Incorrect transaction hash */
-    //	private final static short SW_INCORRECT_TXHASH = (short) 0x9C15;
-    //	/** 2FA already initialized*/
-    //	private final static short SW_2FA_INITIALIZED_KEY = (short) 0x9C18;
-    //	/** 2FA uninitialized*/
-    //	private final static short SW_2FA_UNINITIALIZED_KEY = (short) 0x9C19;
-    
+    // /** Incorrect transaction hash */
+    // private final static short SW_INCORRECT_TXHASH = (short) 0x9C15;
+    // /** 2FA already initialized*/
+    // private final static short SW_2FA_INITIALIZED_KEY = (short) 0x9C18;
+    // /** 2FA uninitialized*/
+    // private final static short SW_2FA_UNINITIALIZED_KEY = (short) 0x9C19;
     
     /** Lock error**/
     private final static short SW_LOCK_ERROR= (short) 0x9C30;
@@ -248,10 +263,15 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static short SW_SECURE_CHANNEL_UNINITIALIZED = (short) 0x9C21;
     private final static short SW_SECURE_CHANNEL_WRONG_IV= (short) 0x9C22;
     private final static short SW_SECURE_CHANNEL_WRONG_MAC= (short) 0x9C23;
-
+    
+    /** PKI error */
+    private final static short SW_PKI_ALREADY_LOCKED = (short) 0x9C40;
+    //private final static short SW_KEYPAIR_MISMATCH = (short) 0x9C41;
+    
     /** For instructions that have been deprecated*/
     private final static short SW_INS_DEPRECATED = (short) 0x9C26;
-
+    /** CARD HAS BEEN RESET TO FACTORY */
+    private final static short SW_RESET_TO_FACTORY = (short) 0xFF00;
     /** For debugging purposes 2 */
     private final static short SW_DEBUG_FLAG = (short) 0x9FFF;
 
@@ -272,11 +292,6 @@ public class SeedKeeper extends javacard.framework.Applet {
     /****************************************
      * Instance variables declaration *
      ****************************************/
-
-    //	// Key objects (allocated on demand)
-    //	private Key[] eckeys;
-    //	private ECPrivateKey tmpkey;
-    //	short eckeys_flag=0x0000; //flag bit set to 1 when corresponding key is initialised 
 
     // PIN and PUK objects, allocated on demand
     private OwnerPIN[] pins, ublk_pins;
@@ -310,11 +325,14 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_TYPE_PUBKEY = (byte) 0x70;
     private final static byte SECRET_TYPE_KEY= (byte) 0x80;
     private final static byte SECRET_TYPE_PASSWORD= (byte) 0x90;
+    private final static byte SECRET_TYPE_CERTIFICATE= (byte) 0xA0;
+    private final static byte SECRET_TYPE_2FA= (byte) 0xB0;
     
     // export controls 
     private final static byte SECRET_EXPORT_ALLOWED = (byte) 0x01; //plain or encrypted
-    private final static byte SECRET_EXPORT_SECUREONLY = (byte) 0x02; // only secure export
-    private final static byte SECRET_EXPORT_FORBIDDEN = (byte) 0x03; // never allowed
+    private final static byte SECRET_EXPORT_SECUREONLY = (byte) 0x02; // only encrypted with authentikey
+    private final static byte SECRET_EXPORT_AUTHENTICATED = (byte) 0x03; // TODO: only encrypted with certified authentikey
+    private final static byte SECRET_EXPORT_FORBIDDEN = (byte) 0x04; // never allowed
     
     // origin
     private final static byte SECRET_ORIGIN_IMPORT_PLAIN= (byte) 0x01; 
@@ -342,6 +360,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte MIN_SEED_SIZE= (byte) 16;
     
     private final static byte AES_BLOCKSIZE= (byte)16;
+    private final static byte SIZE_2FA= (byte)20;
     private static final byte[] SECRET_CST_SC = {'s','e','c','k','e','y', 's','e','c','m','a','c'};
     private byte[] secret_sc_buffer;
     private AESKey secret_sc_sessionkey;
@@ -391,28 +410,20 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private Cipher aes128;
     private MessageDigest sha256;
 
+    // reset to factory
+    private byte[] reset_array;
+    private final static byte MAX_RESET_COUNTER= (byte)5;
+    private byte reset_counter=MAX_RESET_COUNTER;
+    
     /*********************************************
      *  BIP32 Hierarchical Deterministic Wallet  *
      *********************************************/
-    //	// Secure Memory & Object Manager with no access from outside (used internally for storing BIP32 objects)
-    //	private Bip32ObjectManager bip32_om;
-
+    
     // seed derivation
     private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
     private static final byte[] BITCOIN_SEED2 = {'B','i','t','c','o','i','n',' ','s','e','e','d','2'};
     private static final short BIP32_KEY_SIZE= 32; // size of extended key and chain code is 256 bits
-    //	private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
-
-    //	// BIP32_object= [ hash(address) (4b) | extended_key (32b) | chain_code (32b) | compression_byte(1b)]
-    //	// recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | hash(address) (32b) | current_extended_key(32b) | current_chain_code(32b) ]
-    //	// hash(address)= [ index(4b) | unused (28-4b) | ANTICOLLISIONHASH(4b)]
-    //	private static final short BIP32_KEY_SIZE= 32; // size of extended key and chain code is 256 bits
-    //	private static final short BIP32_ANTICOLLISION_LENGTH=4; // max 12 bytes so that index+crc + two hashes fit in 32 bits
-    //	private static final short BIP32_OBJECT_SIZE= (short)(2*BIP32_KEY_SIZE+BIP32_ANTICOLLISION_LENGTH+1);  //TODO
-
-    //   bip32 keys
-    //private boolean bip32_seeded= false;
-
+    // private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
 
     /*********************************************
      *        Other data instances               *
@@ -436,11 +447,22 @@ public class SeedKeeper extends javacard.framework.Applet {
     private static final byte SIZE_SC_IV_COUNTER=SIZE_SC_IV-SIZE_SC_IV_RANDOM;
     private static final byte SIZE_SC_BUFFER=SIZE_SC_MACKEY+SIZE_SC_IV;
 
-    private ECPrivateKey bip32_authentikey; // key used to authenticate data
+    //private ECPrivateKey bip32_authentikey; // key used to authenticate data
     
     // additional options
     private short option_flags;
 
+    /*********************************************
+     *               PKI objects                 *
+     *********************************************/
+    private static final byte[] PKI_CHALLENGE_MSG = {'C','h','a','l','l','e','n','g','e',':'};
+    private boolean personalizationDone=false;
+    private ECPrivateKey authentikey_private;
+    private ECPublicKey authentikey_public;
+    //private KeyPair authentikey_pair;
+    private short authentikey_certificate_size=0;
+    private byte[] authentikey_certificate;
+    
     /****************************************
      * Methods *
      ****************************************/
@@ -459,7 +481,14 @@ public class SeedKeeper extends javacard.framework.Applet {
         /* Setting initial PIN n.0 value */
         pins[0] = new OwnerPIN((byte) 3, (byte) PIN_INIT_VALUE.length);
         pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
-
+        
+        // reset to factory
+        try {
+            reset_array = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
+        } catch (SystemException e) {
+            ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
+        }
+        
         // Temporary working arrays
         try {
             tmpBuffer = JCSystem.makeTransientByteArray(TMP_BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
@@ -482,8 +511,10 @@ public class SeedKeeper extends javacard.framework.Applet {
             recvBuffer = new byte[EXT_APDU_BUFFER_SIZE];
         }
 
-        // common cryptographic objects
+        // shared cryptographic objects
         randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+        secret_sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
+        sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);   
         sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false); 
         HmacSha160.init(tmpBuffer);
         try {
@@ -510,21 +541,35 @@ public class SeedKeeper extends javacard.framework.Applet {
         secret_sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         secret_sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
         
-        // authentikey => used to authenticate applet communication
-        bip32_authentikey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-        Secp256k1.setCommonCurveParameters(bip32_authentikey);
-        randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        bip32_authentikey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
+        // Secret objects manager
+        om_secrets= new ObjectManager(OM_SIZE);
+        randomData.generateData(recvBuffer, (short)0, (short)16);
+        om_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+        om_encryptkey.setKey(recvBuffer, (short)0); // data must be exactly 16 bytes long
+        om_aes128_ecb= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
+       
+        // logger
+        logger= new Logger(LOGGER_NBRECORDS); 
         
         // card label
         card_label= new byte[MAX_CARD_LABEL_SIZE];
         
+        // perso PKI: generate public/private keypair
+        authentikey_private= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        Secp256k1.setCommonCurveParameters(authentikey_private);
+        authentikey_public= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
+        Secp256k1.setCommonCurveParameters(authentikey_public);
+        //authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
+        //authentikey_pair.genKeyPair();
+        randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
+        authentikey_private.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
+        keyAgreement.init(authentikey_private);   
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form => silently fail after cap loaded
+        authentikey_public.setW(recvBuffer, (short)0, (short)65);
+        
         // debug
         register();
     } // end of constructor
-
-
-
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
         SeedKeeper wal = new SeedKeeper(bArray, bOffset, bLength);
@@ -572,7 +617,31 @@ public class SeedKeeper extends javacard.framework.Applet {
             ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
 
         byte ins = buffer[ISO7816.OFFSET_INS];
-
+        
+        // Reset to factory 
+        //    To trigger reset to factory, user must insert and remove card a fixed number of time, 
+        //    without sending any other command than 1 reset in between
+        if (ins == (byte) INS_RESET_TO_FACTORY){
+            if (reset_array[0]==0){
+                reset_counter--;
+                reset_array[0]=(byte)1;
+            }else{
+                // if INS_RESET_TO_FACTORY is sent after any instruction, the reset process is aborted.
+                reset_counter=MAX_RESET_COUNTER;
+                ISOException.throwIt((short)(SW_RESET_TO_FACTORY + 0xFF));
+            }
+            if (reset_counter== 0) {
+                reset_counter=MAX_RESET_COUNTER;
+                resetToFactory();
+                ISOException.throwIt(SW_RESET_TO_FACTORY);
+            }
+            ISOException.throwIt((short)(SW_RESET_TO_FACTORY + reset_counter));
+        }
+        else{
+            reset_counter=MAX_RESET_COUNTER;
+            reset_array[0]=(byte)1;
+        }
+        
         // prepare APDU buffer
         if (ins != INS_GET_STATUS){
             short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
@@ -597,7 +666,7 @@ public class SeedKeeper extends javacard.framework.Applet {
             sizeout= ProcessSecureChannel(apdu, buffer);
             //todo: check if sizeout and buffer[ISO7816.OFFSET_LC] matches...
             //if sizeout>4, buffer[ISO7816.OFFSET_LC] should be equal to (sizeout-5)
-            //todo: remove padding ? (it is actually not used)			
+            //todo: remove padding ? (it is actually not used)          
         }
         else if (needs_secure_channel){
             ISOException.throwIt(SW_SECURE_CHANNEL_REQUIRED);
@@ -605,9 +674,16 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         // at this point, the encrypted content has been deciphered in the buffer
         ins = buffer[ISO7816.OFFSET_INS];
-        // check setup status
-        if (!setupDone && (ins != INS_SETUP))
-            ISOException.throwIt(SW_SETUP_NOT_DONE);
+        if (!setupDone && (ins != INS_SETUP)){
+            if (personalizationDone ||
+                    ((ins != INS_VERIFY_PIN) 
+                    && (ins != INS_EXPORT_PKI_PUBKEY)
+                    && (ins != INS_IMPORT_PKI_CERTIFICATE)
+                    && (ins != INS_SIGN_PKI_CSR)
+                    && (ins != INS_LOCK_PKI)) ){
+                ISOException.throwIt(SW_SETUP_NOT_DONE);
+            } 
+        }
         if (setupDone && (ins == INS_SETUP))
             ISOException.throwIt(SW_SETUP_ALREADY_DONE);
 
@@ -648,11 +724,11 @@ public class SeedKeeper extends javacard.framework.Applet {
             case INS_BIP32_GET_AUTHENTIKEY:
                 sizeout= getBIP32AuthentiKey(apdu, buffer);
                 break;
-            case INS_BIP32_SET_AUTHENTIKEY_PUBKEY:
-                sizeout= setBIP32AuthentikeyPubkey(apdu, buffer);
-                break;
             case INS_GENERATE_MASTERSEED:
                 sizeout= generateMasterseed(apdu, buffer);
+                break;
+            case INS_GENERATE_2FA_SECRET:
+                sizeout= generate2FASecret(apdu, buffer);
                 break;
             case INS_IMPORT_SECRET:
                 sizeout= importSecret(apdu, buffer);
@@ -670,8 +746,28 @@ public class SeedKeeper extends javacard.framework.Applet {
                 sizeout= printLogs(apdu, buffer);
                 break;
             case INS_EXPORT_AUTHENTIKEY:
-                sizeout= exportAuthentikey(apdu, buffer);
+                sizeout= getAuthentikey(apdu, buffer);
                 break;    
+            //PKI
+            case INS_EXPORT_PKI_PUBKEY:
+                sizeout= export_PKI_pubkey(apdu, buffer);
+                break;
+            case INS_IMPORT_PKI_CERTIFICATE:
+                sizeout= import_PKI_certificate(apdu, buffer);
+                break;
+            case INS_EXPORT_PKI_CERTIFICATE:
+                sizeout= export_PKI_certificate(apdu, buffer);
+                break;
+            case INS_SIGN_PKI_CSR:
+                sizeout= sign_PKI_CSR(apdu, buffer);
+                break;
+            case INS_LOCK_PKI:
+                sizeout= lock_PKI(apdu, buffer);
+                break;
+            case INS_CHALLENGE_RESPONSE_PKI:
+                sizeout= challenge_response_pki(apdu, buffer);
+                break;
+            // default
             default:
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         }//end of switch
@@ -719,16 +815,17 @@ public class SeedKeeper extends javacard.framework.Applet {
      *        option_flags(2b - RFU) | 
      *        ]
      * where: 
-     * 		default_pin: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30};
-     * 		pin_tries: max number of PIN try allowed before the corresponding PIN is blocked
-     * 		ublk_tries:  max number of UBLK(unblock) try allowed before the PUK is blocked
-     * 		option_flags: flags to define up to 16 additional options		
+     *      default_pin: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30};
+     *      pin_tries: max number of PIN try allowed before the corresponding PIN is blocked
+     *      ublk_tries:  max number of UBLK(unblock) try allowed before the PUK is blocked
+     *      option_flags: flags to define up to 16 additional options       
      * return: none
      */
     private short setup(APDU apdu, byte[] buffer) {
+        personalizationDone=true;// perso PKI should not be modifiable once setup is done
+        
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         short base = (short) (ISO7816.OFFSET_CDATA);
-
         byte numBytes = buffer[base++];
         bytesLeft--;
 
@@ -737,7 +834,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        byte triesRemaining	= pin.getTriesRemaining();
+        byte triesRemaining = pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, base, numBytes))
@@ -765,7 +862,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        ublk_pins[0] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
+        if (ublk_pins[0]==null)
+            ublk_pins[0] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
         ublk_pins[0].update(buffer, base, numBytes);
 
         base += numBytes;
@@ -779,7 +877,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        pins[1] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
+        if (pins[1]==null)
+            pins[1] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
         pins[1].update(buffer, base, numBytes);
 
         base += numBytes;
@@ -790,7 +889,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        ublk_pins[1] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
+        if (ublk_pins[1]==null)
+            ublk_pins[1] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
         ublk_pins[1].update(buffer, base, numBytes);
         base += numBytes;
         bytesLeft-=numBytes;
@@ -806,23 +906,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         RFU = buffer[base++]; //create_pin_ACL deprecated => RFU
         bytesLeft-=3;
         
-        logger= new Logger(LOGGER_NBRECORDS); // logger
-        logged_ids = 0x0000; // No identities logged in
-
-        om_nextid= (short)0;
-        om_secrets= new ObjectManager(OM_SIZE);
-        randomData.generateData(recvBuffer, (short)0, (short)16);
-        om_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-        om_encryptkey.setKey(recvBuffer, (short)0); // data must be exactly 16 bytes long
-        om_aes128_ecb= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
-        
-        // shared cryptographic objects
-        secret_sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
-        sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
-        
-        // HD wallet
-        //HmacSha512.init(tmpBuffer); // TODO: remove?
-
         // parse options
         option_flags=0;
         if (bytesLeft>=2){
@@ -830,7 +913,9 @@ public class SeedKeeper extends javacard.framework.Applet {
             base+=(short)2;
             bytesLeft-=(short)2;
         }
-
+        
+        logged_ids = 0x0000; // No identities logged in
+        om_nextid= (short)0;
         setupDone = true;
         return (short)0;//nothing to return
     }
@@ -869,14 +954,35 @@ public class SeedKeeper extends javacard.framework.Applet {
         // throws exception
         ISOException.throwIt(SW_LOCK_ERROR);
     }
-
+    
+    /** Erase all user data */
+    private boolean resetToFactory(){
+        
+        //TODO        
+        // logs
+        // currently, we do NOT erase logs, but we add an entry for the reset
+        logger.createLog(INS_RESET_TO_FACTORY, (short)-1, (short)-1, (short)0x0000 );
+        
+        // reset all secrets in store
+        om_secrets.resetObjectManager(true);
+        
+        // reset card label
+        card_label_size=0;
+        Util.arrayFillNonAtomic(card_label, (short)0, (short)card_label.length, (byte)0);
+        
+        // setup
+        pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
+        setupDone=false;
+        
+        // update log
+        logger.updateLog(INS_RESET_TO_FACTORY, (short)-1, (short)-1, (short)0x9000 );
+        
+        return true;
+    }
+    
     /****************************************
      * APDU handlers *
-     ****************************************/	
-
-    /****************************************
-     * APDU handlers *
-     ****************************************/	
+     ****************************************/   
     
     /** 
      * This function generates a master seed randomly within the SeedKeeper
@@ -958,351 +1064,83 @@ public class SeedKeeper extends javacard.framework.Applet {
         // Send response
         return (short)(2+SECRET_FINGERPRINT_SIZE);
     }
-
     
     /** 
-     * DEPRECATED: use importSecret() instead.
-     * This function imports a secret in plaintext from host.
+     * This function generates a 2FA-secret randomly within the SeedKeeper
      * 
-     * ins: 0xA1
-     * p1: 0
-     * p2: operation (Init-Update-Final)
-     * data:
-     * 		(init): [ type(1b) | export_control(1b) | label_size(1b) | label ]
-     *          TODO: add RFU(2b)?
-     * 		(update):[chunk_size(2b) | data_blob ]
-     * 		(final): [chunk_size(2b) | data_blob ]
+     * ins: AE
+     * p1: 0x00
+     * p2: export_rights
+     * data: [ label_size(1b) | label  ]
      * return: [ id(2b) | fingerprint(4b) ]
      */
-//    private short importPlainSecret(APDU apdu, byte[] buffer){
-//        // check that PIN[0] has been entered previously
-//        if (!pins[0].isValidated())
-//            ISOException.throwIt(SW_UNAUTHORIZED);
-//
-//        short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-//        byte op = buffer[ISO7816.OFFSET_P2];
-//        short buffer_offset = ISO7816.OFFSET_CDATA;
-//        short recv_offset = (short)0;
-//        short data_size= (short)0;
-//        short enc_size=(short)0;
-//
-//        switch (op) {
-//            case OP_INIT:
-//                // log operation to be updated later
-//                logger.createLog(INS_IMPORT_PLAIN_SECRET, (short)0, (short)0, (short)0x0000);
-//                
-//                // TODO: check lock?
-//                if (bytes_left<3)
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//
-//                byte type= buffer[buffer_offset];
-//                buffer_offset++;
-//                byte export_rights= buffer[buffer_offset];
-//                buffer_offset++;
-//                if ((export_rights < SECRET_EXPORT_ALLOWED) || (export_rights > SECRET_EXPORT_FORBIDDEN) )
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//                short label_size= Util.makeShort((byte) 0x00, buffer[buffer_offset]);
-//                if (label_size> MAX_LABEL_SIZE)
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//                buffer_offset++;
-//                bytes_left-=3;
-//                if (bytes_left<label_size)
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//
-//                // load (not so sensitive) header data from buffer
-//                recvBuffer[SECRET_OFFSET_TYPE]= type;
-//                recvBuffer[SECRET_OFFSET_ORIGIN]= SECRET_ORIGIN_IMPORT_PLAIN;
-//                recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]= export_rights;
-//                recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
-//                recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
-//                recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0;
-//                Util.arrayFillNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE, (byte)0);
-//                recvBuffer[SECRET_OFFSET_RFU1]= (byte)0;
-//                recvBuffer[SECRET_OFFSET_RFU2]= (byte)0;
-//                recvBuffer[SECRET_OFFSET_LABEL_SIZE]= (byte) (label_size & 0x7f);
-//                Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, SECRET_OFFSET_LABEL, label_size);
-//                recv_offset+= (SECRET_HEADER_SIZE+label_size);
-//
-//                // initialize cipher 
-//                om_aes128_ecb.init(om_encryptkey, Cipher.MODE_ENCRYPT);
-//                sha256.reset();
-//
-//                //TODO: ensure atomicity?
-//                lock_enabled = true;
-//                lock_ins= INS_IMPORT_PLAIN_SECRET;
-//                lock_lastop= OP_INIT;
-//                lock_recv_offset= recv_offset;
-//                lock_data_size= (short)0;
-//                return (short)0;
-//                
-//                //DEBUG
-//                //Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, (short)(recv_offset));
-//                //return (short)(recv_offset);
-//                //ENDBUG
-//                
-//            case OP_PROCESS:
-//                // TODO: check lock
-//                if ( (!lock_enabled) ||
-//                        (lock_ins!= INS_IMPORT_PLAIN_SECRET) ||
-//                        (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
-//                {
-//                    resetLockException();
-//                }
-//
-//                if (bytes_left<2){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);}
-//
-//                // load the new (sensitive) data
-//                buffer_offset = ISO7816.OFFSET_CDATA;
-//                recv_offset = lock_recv_offset;
-//                data_size= Util.getShort(buffer, buffer_offset);
-//                buffer_offset+=2;				
-//                bytes_left-=2;
-//                if (bytes_left<data_size){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);
-//                }
-//
-//                // hash & encrypt data
-//                sha256.update(buffer, buffer_offset, data_size);
-//                try{
-//                    enc_size= om_aes128_ecb.update(buffer, buffer_offset, data_size, recvBuffer, recv_offset);
-//                } catch (ArrayIndexOutOfBoundsException e){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_IMPORTED_DATA_TOO_LONG);}
-//                recv_offset+= enc_size;
-//                lock_data_size+=data_size;
-//
-//                // TODO: ENSURE CONTINUITY OF OPERATIONS BETWEEN MULTIPLE APDU COMMANDS
-//                // Update lock state
-//                //lock_enabled = true;
-//                //lock_ins= INS_IMPORT_PLAIN_SECRET;
-//                lock_lastop= OP_PROCESS;
-//                lock_recv_offset= recv_offset;
-//                return (short)0;
-//
-//            case OP_FINALIZE:
-//                // check lock
-//                if ( (!lock_enabled) || 
-//                        (lock_ins!= INS_IMPORT_PLAIN_SECRET) ||
-//                        (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
-//                {
-//                    resetLockException();
-//                }
-//
-//                if (bytes_left>=2){
-//                    // load the new (sensitive) data
-//                    buffer_offset = ISO7816.OFFSET_CDATA;
-//                    data_size= Util.getShort(buffer, buffer_offset);
-//                    buffer_offset+=2;
-//                    bytes_left-=2;	
-//                }else{
-//                    // no more data
-//                    data_size=(short)0;
-//                }
-//                
-//                // padding
-//                lock_data_size+=data_size;
-//                short padsize= (short) (AES_BLOCKSIZE - (lock_data_size%AES_BLOCKSIZE));
-//                Util.arrayFillNonAtomic(buffer, (short)(buffer_offset+data_size), padsize, (byte)padsize);//padding
-//                
-//                // finalize encrypt data
-//                recv_offset= lock_recv_offset;
-//                try{
-//                    enc_size= om_aes128_ecb.doFinal(buffer, buffer_offset, (short)(data_size+padsize), recvBuffer, recv_offset);
-//                } catch (ArrayIndexOutOfBoundsException e){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_IMPORTED_DATA_TOO_LONG);}
-//                recv_offset+=enc_size;
-//                // finalize hash to fingerprint
-//                sha256.doFinal(buffer, buffer_offset, data_size, buffer, (short)0);
-//                Util.arrayCopyNonAtomic(buffer, (short)0, recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE);
-//                
-//                // save to next available object
-//                // Check if object exists
-//                while (om_secrets.exists(OM_TYPE, om_nextid)){
-//                    om_nextid++;
-//                }
-//                short base= om_secrets.createObject(OM_TYPE, om_nextid, recv_offset);
-//                om_secrets.setObjectData(base, (short)0, recvBuffer, (short)0, recv_offset);
-//                
-//                // log operation
-//                logger.updateLog(INS_IMPORT_PLAIN_SECRET, om_nextid, (short)0, (short)0x9000);
-//                
-//                // Fill the R-APDU buffer
-//                Util.setShort(buffer, (short) 0, om_nextid);
-//                om_nextid++;
-//                Util.arrayCopyNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, buffer, (short)2, SECRET_FINGERPRINT_SIZE);
-//                //DEBUG
-//                //Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)2, recv_offset);
-//                //ENDBUG
-//                
-//                // Release lock
-//                lock_enabled = false;
-//                lock_ins= 0x00;
-//                lock_lastop= 0x00;
-//                lock_recv_offset= 0x00;
-//                lock_data_size= 0x00;
-//                
-//                // Send response
-//                return (short)(2+SECRET_FINGERPRINT_SIZE);
-//                //return (short)(2+recv_offset);//DEBUG
-//
-//            default:
-//                ISOException.throwIt(SW_INCORRECT_P2);
-//        } // switch(op) 
-//
-//        // Send default response
-//        return (short)0;	
-//    }
-
-    /** 
-     * DEPRECATED: use exportSecret() instead.
-     * 
-     * This function exports a secret in plaintext to the host.
-     * Data is encrypted during transport through the Secure Channel
-     * but the host has access to the data in plaintext.
-     * 
-     * ins: 0xA2
-     * p1: 0
-     * p2: operation (Init-Update-Final)
-     * data: [ id(2b) ]
-     * return: 
-     * 		(init):[ id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | fingerprint(4b) | label_size(1b) | label  ]
-     * 		(next):[data_blob_size(2b) | data_blob | sig_size | authentikey_sig]
-     */
-//    private short exportPlainSecret(APDU apdu, byte[] buffer){
-//        // check that PIN[0] has been entered previously
-//        if (!pins[0].isValidated())
-//            ISOException.throwIt(SW_UNAUTHORIZED);
-//        
-//        short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-//        //byte op = buffer[ISO7816.OFFSET_P2];
-//        short buffer_offset = ISO7816.OFFSET_CDATA;
-//        short recv_offset = (short)0;
-//        //short data_size= (short)0;// not used?
-//        short enc_size=(short)0;
-//        short chunk_size=(short)128; // should be multiple of 16 // TODO: make static final
-//        
-//        byte op = buffer[ISO7816.OFFSET_P2];
-//        switch (op) {
-//            case OP_INIT: // first request
-//                // set lock?
-//                lock_enabled = true;
-//                lock_ins= INS_EXPORT_PLAIN_SECRET;
-//                lock_lastop= OP_INIT;
-//                //lock_data_size= (short)0;
-//                lock_data_remaining= (short)0;
-//                lock_recv_offset= (short)0;
-//                
-//                // get id
-//                if (bytes_left<2){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_INVALID_PARAMETER);}
-//                buffer_offset = ISO7816.OFFSET_CDATA;
-//                lock_id= Util.getShort(buffer, ISO7816.OFFSET_CDATA);
-//                
-//                // log operation to be updated later
-//                logger.createLog(INS_EXPORT_PLAIN_SECRET, lock_id, (short)0, (short)0x0000);
-//                
-//                // copy to buffer
-//                short base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
-//                if (base==(short)0xFFFF){
-//                    resetLock();
-//                    ISOException.throwIt(SW_OBJECT_NOT_FOUND);
-//                }
-//                short obj_size= om_secrets.getSizeFromAddress(base);
-//                om_secrets.getObjectData(base, (short)0, recvBuffer, (short)0, obj_size);
-//                // check export rights
-//                if (recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]!=SECRET_EXPORT_ALLOWED){
-//                    resetLock();// TODO: reset or not?
-//                    ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
-//                }
-//                // update export_nb in object
-//                recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]+=1;
-//                om_secrets.setObjectByte(base, SECRET_OFFSET_EXPORT_NBPLAIN, recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]);
-//                
-//                // copy id & header to buffer
-//                Util.setShort(buffer, (short)0, lock_id);
-//                short label_size= Util.makeShort((byte)0, recvBuffer[SECRET_OFFSET_LABEL_SIZE]);
-//                Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
-//                recv_offset= (short)(SECRET_HEADER_SIZE+label_size);
-//                lock_recv_offset= recv_offset;
-//                lock_data_remaining= (short)(obj_size-recv_offset);
-//                
-//                // initialize cipher & signature for next phases
-//                om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
-//                sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-//                sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
-//                
-//                // the client can recover full public-key from the signature or
-//                // by guessing the compression value () and verifying the signature... 
-//                // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label | sigsize(2) | sig]
-//                return (short)(2+SECRET_HEADER_SIZE+label_size);
-//                
-//            case OP_PROCESS: // following requests
-//                // check lock
-//                if ( (lock_ins!= INS_EXPORT_PLAIN_SECRET) ||
-//                     (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
-//                {
-//                    resetLockException();
-//                }
-//                
-//                // decrypt & export data chunk by chunk
-//                if (lock_data_remaining>chunk_size){
-//                    
-//                    enc_size= om_aes128_ecb.update(recvBuffer, lock_recv_offset, chunk_size, buffer, (short)2);
-//                    Util.setShort(buffer, (short)(0), enc_size);
-//                    lock_recv_offset+= chunk_size;
-//                    //lock_data_size+=enc_size;
-//                    lock_data_remaining-=chunk_size;
-//                    
-//                    // update sign with authentikey
-//                    sigECDSA.update(buffer, (short)2, enc_size);
-//                    
-//                    // buffer= [data_size(2b) | data_chunk]
-//                    return (short)(2+enc_size);
-//                
-//                //finalize last chunk
-//                }else{ 
-//                    
-//                    enc_size= om_aes128_ecb.doFinal(recvBuffer, lock_recv_offset, lock_data_remaining, buffer, (short)2);
-//                    //remove padding
-//                    byte padsize= buffer[(short)(2+enc_size-1)];
-//                    enc_size-=padsize;
-//                    Util.setShort(buffer, (short)(0), enc_size);
-//                    lock_recv_offset+= lock_data_remaining;
-//                    lock_data_remaining=(short)0;
-//                    
-//                    // finalize sign with authentikey
-//                    short sign_size= sigECDSA.sign(buffer, (short)2, enc_size, buffer, (short)(2+enc_size+2));
-//                    Util.setShort(buffer, (short)(2+enc_size), sign_size);
-//                    
-//                    // log operation to be updated later
-//                    logger.updateLog(INS_EXPORT_PLAIN_SECRET, lock_id, (short)0, (short)0x9000);
-//                    
-//                    // update/finalize lock
-//                    Util.arrayFillNonAtomic(recvBuffer, (short)0, lock_recv_offset, (byte)0x00);
-//                    lock_ins= (byte)0x00;
-//                    lock_lastop= (byte)0x00;
-//                    lock_id=(short)0;
-//                    //lock_data_size= (short)0;
-//                    lock_recv_offset=(short)0;
-//                    lock_enabled = false;
-//                    
-//                    // the client can recover full public-key from the signature or
-//                    // by guessing the compression value () and verifying the signature... 
-//                    // buffer= [data_size(2b) | data_chunk | sigsize(2) | sig]
-//                    return (short)(2+enc_size+2+sign_size);                
-//                }
-//            default:
-//                resetLock();
-//                ISOException.throwIt(SW_INCORRECT_P2);
-//        }// end switch   
-//        
-//        return (short)(0); // should never happen
-//    }// end exportPlainSecret
+    private short generate2FASecret(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        // log operation
+        logger.createLog(INS_GENERATE_2FA_SECRET, (short)-1, (short)-1, (short)0x0000);
+        
+        byte export_rights = buffer[ISO7816.OFFSET_P2];
+        if ((export_rights < SECRET_EXPORT_ALLOWED) || (export_rights > SECRET_EXPORT_FORBIDDEN) )
+            ISOException.throwIt(SW_INCORRECT_P2);
+    
+        short buffer_offset = ISO7816.OFFSET_CDATA;
+        short recv_offset = (short)0;
+        short label_size= Util.makeShort((byte) 0x00, buffer[buffer_offset]);
+        buffer_offset++;
+        if (label_size> MAX_LABEL_SIZE)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+    
+        // common data_header: [ type(1b) | origin(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | export_pubkey_counter(1b) | fingerprint(4b) | label_size(1b) | label ]
+        // SECRET_TYPE_2FA: [ size(1b) | 2FA_secret_blob ]
+        recvBuffer[SECRET_OFFSET_TYPE]= SECRET_TYPE_2FA;
+        recvBuffer[SECRET_OFFSET_ORIGIN]= SECRET_ORIGIN_ONCARD;
+        recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]= export_rights;
+        recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
+        recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
+        recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0;
+        recvBuffer[SECRET_OFFSET_RFU1]= (byte)0;
+        recvBuffer[SECRET_OFFSET_RFU2]= (byte)0;
+        recvBuffer[SECRET_OFFSET_LABEL_SIZE]= (byte) (label_size & 0x7f);
+        Util.arrayFillNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE, (byte)0);
+        Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, SECRET_OFFSET_LABEL, label_size);
+        recv_offset= (short) (SECRET_HEADER_SIZE + label_size);
+        
+        // generate seed
+        buffer[(short)0]= SIZE_2FA;
+        randomData.generateData(buffer,(short)(1), SIZE_2FA);
+        //fingerprint
+        sha256.reset();
+        sha256.doFinal(buffer, (short)0, (short)(SIZE_2FA+1), buffer, (short)(SIZE_2FA+1));
+        Util.arrayCopyNonAtomic(buffer, (short)(SIZE_2FA+1), recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE);
+        //pad and encrypt seed for storage 
+        short padsize= (short) (AES_BLOCKSIZE - ((SIZE_2FA+1)%AES_BLOCKSIZE) );
+        Util.arrayFillNonAtomic(buffer, (short)(1+SIZE_2FA), padsize, (byte)padsize);//padding
+        om_aes128_ecb.init(om_encryptkey, Cipher.MODE_ENCRYPT);
+        short enc_size= om_aes128_ecb.doFinal(buffer, (short)0, (short)(1+SIZE_2FA+padsize), recvBuffer, recv_offset);
+        recv_offset+=enc_size; //recv_offset+= SIZE_2FA;
+        
+        // Check if object exists
+        while (om_secrets.exists(OM_TYPE, om_nextid)){
+            om_nextid++;
+        }
+        short base= om_secrets.createObject(OM_TYPE, om_nextid, recv_offset);
+        om_secrets.setObjectData(base, (short)0, recvBuffer, (short)0, recv_offset);
+        
+        // log operation (todo: fill log as soon as available)
+        logger.updateLog(INS_GENERATE_2FA_SECRET, om_nextid, (short)-1, (short)0x9000);
+        
+        // Fill the buffer
+        Util.setShort(buffer, (short) 0, om_nextid);
+        Util.arrayCopyNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, buffer, (short)2, SECRET_FINGERPRINT_SIZE);
+        om_nextid++;
+        
+        // TODO: sign id with authentikey?
+        // Send response
+        return (short)(2+SECRET_FINGERPRINT_SIZE);
+    }
     
     /** 
      * This function imports a secret in plaintext/encrypted from host.
@@ -1407,7 +1245,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                         ISOException.throwIt(SW_INVALID_PARAMETER);
                     }
                     // compute shared static key 
-                    keyAgreement.init(bip32_authentikey);        
+                    keyAgreement.init(authentikey_private);        
                     keyAgreement.generateSecret(recvBuffer, (short)(data_offset+1), pubkey_size, recvBuffer, (short)0); //pubkey in uncompressed form
                     // derive secret_sessionkey & secret_mackey
                     HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
@@ -1692,7 +1530,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     }
                     
                     // compute shared static key 
-                    keyAgreement.init(bip32_authentikey);        
+                    keyAgreement.init(authentikey_private);        
                     keyAgreement.generateSecret(recvBuffer, (short)(data_offset+1), (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
                     // derive secret_sessionkey & secret_mackey
                     HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
@@ -1710,6 +1548,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 short base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
                 if (base==(short)0xFFFF){
                     resetLock();
+                    logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_OBJECT_NOT_FOUND);
                     ISOException.throwIt(SW_OBJECT_NOT_FOUND);
                 }
                 short obj_size= om_secrets.getSizeFromAddress(base);
@@ -1719,6 +1558,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     // check export rights
                     if (recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]!=SECRET_EXPORT_ALLOWED){
                         resetLock();
+                        logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_EXPORT_NOT_ALLOWED);
                         ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
                     }
                     recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]+=1; 
@@ -1748,7 +1588,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     //secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
                     secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE-1)); //do not hash label & label_size => may be changed during import
                 }else{
-                    sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+                    sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
                     sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
                 }
                 // the client can recover full public-key from the signature or
@@ -1765,7 +1605,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 if ( (lock_ins!= INS_EXPORT_SECRET) ||
                      (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
                 {
-                    resetLockException();
+                    resetLockException(); //TODO: log error?
                 }
                 
                 // decrypt & export data chunk by chunk
@@ -1847,7 +1687,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         }// end switch   
         
         return (short)(0); // should never happen
-    }// end exportPlainSecret
+    }// end exportSecret
             
     /** 
      * This function list all the objects stored in secure memory
@@ -2032,7 +1872,7 @@ public class SeedKeeper extends javacard.framework.Applet {
          */
         if (!CheckPINPolicy(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft))
             ISOException.throwIt(SW_INVALID_PARAMETER);
-        byte triesRemaining	= pin.getTriesRemaining();
+        byte triesRemaining = pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) ISO7816.OFFSET_CDATA, (byte) bytesLeft)) {
@@ -2086,7 +1926,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, (short) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1), new_pin_size))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        byte triesRemaining	= pin.getTriesRemaining();
+        byte triesRemaining = pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size)) {
@@ -2135,7 +1975,7 @@ public class SeedKeeper extends javacard.framework.Applet {
          */
         if (!CheckPINPolicy(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft))
             ISOException.throwIt(SW_INVALID_PARAMETER);
-        byte triesRemaining	= ublk_pin.getTriesRemaining();
+        byte triesRemaining = ublk_pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!ublk_pin.check(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft)){
@@ -2196,7 +2036,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     /**
      * This function retrieves general information about the Applet running on the smart
      * card, and useful information about the status of current session such as:
-     * 		- applet version (4b)
+     *      - applet version (4b)
      *  
      *  ins: 0x3C
      *  p1: 0x00 
@@ -2207,7 +2047,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private short GetStatus(APDU apdu, byte[] buffer) {
         // check that PIN[0] has been entered previously
         //if (!pins[0].isValidated())
-        //	ISOException.throwIt(SW_UNAUTHORIZED);
+        // ISOException.throwIt(SW_UNAUTHORIZED);
 
         if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
             ISOException.throwIt(SW_INCORRECT_P1);
@@ -2312,100 +2152,45 @@ public class SeedKeeper extends javacard.framework.Applet {
      *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
      */
     private short getBIP32AuthentiKey(APDU apdu, byte[] buffer){
-        return exportAuthentikey(apdu, buffer);
-        
-//    	// check that PIN[0] has been entered previously
-//        if (!pins[0].isValidated())
-//            ISOException.throwIt(SW_UNAUTHORIZED);
-//
-////        // check whether the seed is initialized
-////        if (!bip32_seeded)
-////            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-//
-//        // compute the partial authentikey public key...
-//        keyAgreement.init(bip32_authentikey);        
-//        short coordx_size= (short)32;
-//        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-//        Util.setShort(buffer, (short)0, coordx_size);
-//        // self signed public key
-//        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-//        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-//        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
-//
-//        // return x-coordinate of public key+signature
-//        // the client can recover full public-key from the signature or
-//        // by guessing the compression value () and verifying the signature... 
-//        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
-//        return (short)(coordx_size+sign_size+4);
+        return getAuthentikey(apdu, buffer);
     }
     
     /**
-	 * This function returns the authentikey public key.
-	 * The function returns the x-coordinate of the authentikey, self-signed.
-	 * The authentikey full public key can be recovered from the signature.
-	 * 
-	 * Compared to getBIP32AuthentiKey(), this method returns the Authentikey even if the card is not seeded.
-	 * For SeedKeeper encrypted seed import, we use the authentikey as a Trusted Pubkey for the ECDH key exchange, 
-	 * thus the authentikey must be available before the Satochip is seeded. 
-	 * Before a seed is available, the authentiey is generated oncard randomly in the constructor
-	 * 
-	 *  ins: 0xAD
-	 *  p1: 0x00 
-	 *  p2: 0x00 
-	 *  data: none
-	 *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
-	 */
-	private short exportAuthentikey(APDU apdu, byte[] buffer){
-		// check that PIN[0] has been entered previously
-		if (!pins[0].isValidated())
-			ISOException.throwIt(SW_UNAUTHORIZED);
-		
-		// compute the partial authentikey public key...
-        keyAgreement.init(bip32_authentikey);        
-        short coordx_size= (short)32;
-    	keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-		Util.setShort(buffer, (short)0, coordx_size);
+     * This function returns the authentikey public key.
+     * The function returns the x-coordinate of the authentikey, self-signed.
+     * The authentikey full public key can be recovered from the signature.
+     * 
+     * Compared to getBIP32AuthentiKey(), this method returns the Authentikey even if the card is not seeded.
+     * For SeedKeeper encrypted seed import, we use the authentikey as a Trusted Pubkey for the ECDH key exchange, 
+     * thus the authentikey must be available before the Satochip is seeded. 
+     * Before a seed is available, the authentiey is generated oncard randomly in the constructor
+     * 
+     *  ins: 0xAD
+     *  p1: 0x00 
+     *  p2: 0x00 
+     *  data: none
+     *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
+     */
+    private short getAuthentikey(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        // get the partial authentikey public key...
+        authentikey_public.getW(buffer, (short)1);
+        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         // self signed public key
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
         
         // return x-coordinate of public key+signature
         // the client can recover full public-key from the signature or
         // by guessing the compression value () and verifying the signature... 
         // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
-        return (short)(coordx_size+sign_size+4);
-	}
+        return (short)(BIP32_KEY_SIZE+sign_size+4);
+    }
     
-    /**
-     * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
-     * A minimalist API is maintained for backward compatibility.
-     * 
-     * This function allows to compute the authentikey pubkey externally and 
-     * store it in the secure memory cache for future use. 
-     * This allows to speed up computation during derivation of non-hardened child.
-     * 
-     * ins: 0x75
-     * p1: 
-     * p2:
-     * data: [coordx_size(2b) | coordx | sig_size(2b) | sig][coordy_size(2b) | coordy]
-     *
-     * returns: none
-     */
-    private short setBIP32AuthentikeyPubkey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        //TODO: get available memory
-        short pos=0;
-        Util.setShort(buffer, pos, (short)0x0000); // number of slot available 
-        pos += (short) 2;
-        Util.setShort(buffer, pos, (short)0x0000); // number of slot used 
-        pos += (short) 2;
-        return pos;
-    }// end of setBIP32AuthentikeyPubkey
-
     /**
      * This function allows to initiate a Secure Channel
      *  
@@ -2425,41 +2210,33 @@ public class SeedKeeper extends javacard.framework.Applet {
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
         // generate a new ephemeral key
-        sc_ephemeralkey.clearKey();
+        sc_ephemeralkey.clearKey(); //todo: simply generate new random S param instead?
         Secp256k1.setCommonCurveParameters(sc_ephemeralkey);// keep public params!
         randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
         sc_ephemeralkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
 
         // compute the shared secret...
         keyAgreement.init(sc_ephemeralkey);        
-        short coordx_size= (short)32;
         keyAgreement.generateSecret(buffer, ISO7816.OFFSET_CDATA, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
         // derive sc_sessionkey & sc_mackey
         HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, CST_SC, (short)6, (short)6, recvBuffer, (short)33);
         Util.arrayCopyNonAtomic(recvBuffer, (short)33, sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY);
         HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, CST_SC, (short)0, (short)6, recvBuffer, (short)33);
         sc_sessionkey.setKey(recvBuffer,(short)33); // AES-128: 16-bytes key!!       
-        //    	//alternatively: derive session_key (sha256 of coordx)
-        //    	sha256.reset();
-        //    	sha256.doFinal(recvBuffer, (short)1, (short)32, recvBuffer, (short) 0);
-        //    	sc_sessionkey.setKey(recvBuffer,(short)0); // AES-128: 16-bytes key!!
-        //    	//derive mac_key
-        //    	sha256.reset();
-        //    	sha256.doFinal(recvBuffer, (short)0, (short)32, sc_mackey, (short) 0);
 
         //reset IV counter
         Util.arrayFillNonAtomic(sc_buffer, OFFSET_SC_IV, SIZE_SC_IV, (byte) 0);
 
         // self signed ephemeral pubkey
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, coordx_size);
+        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         sigECDSA.init(sc_ephemeralkey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
 
         // hash signed by authentikey
-        short offset= (short)(2+coordx_size+2+sign_size);
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+        short offset= (short)(2+BIP32_KEY_SIZE+2+sign_size);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
         Util.setShort(buffer, offset, sign2_size);
         offset+=(short)(2+sign2_size); 
@@ -2531,6 +2308,228 @@ public class SeedKeeper extends javacard.framework.Applet {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         short sizeout=sc_aes128_cbc.doFinal(buffer, offset, sizein, buffer, (short) (0));
         return sizeout;
+    }
+    
+    
+    /*********************************************
+     *      Methods for PKI personalization      *
+     *********************************************/
+    
+    /**
+     * This function is used to self-sign the CSR of the device
+     *  
+     *  ins: 0x94
+     *  p1: 0x00  
+     *  p2: 0x00 
+     *  data: [hash(32b)]
+     *  return: [signature]
+     */
+    private short sign_PKI_CSR(APDU apdu, byte[] buffer) {
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        if (personalizationDone)
+            ISOException.throwIt(SW_PKI_ALREADY_LOCKED);
+        
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        if (bytesLeft < (short)32)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
+        return sign_size;
+    }
+    
+    /**
+     * This function export the ECDSA secp256k1 public key that corresponds to the private key
+     *  
+     *  ins: 
+     *  p1: 0x00
+     *  p2: 0x00 
+     *  data: [none]
+     *  return: [ pubkey (65b) ]
+     */
+    private short export_PKI_pubkey(APDU apdu, byte[] buffer) {
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        authentikey_public.getW(buffer, (short)0); 
+        return (short)65;
+    }
+    
+    /**
+     * This function imports the device certificate
+     *  
+     *  ins: 
+     *  p1: 0x00
+     *  p2: Init-Update 
+     *  data(init): [ full_size(2b) ]
+     *  data(update): [chunk_offset(2b) | chunk_size(2b) | chunk_data ]
+     *  return: [none]
+     */
+    private short import_PKI_certificate(APDU apdu, byte[] buffer) {
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        if (personalizationDone)
+            ISOException.throwIt(SW_PKI_ALREADY_LOCKED);
+        
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        short buffer_offset = (short) (ISO7816.OFFSET_CDATA);
+        
+        byte op = buffer[ISO7816.OFFSET_P2];
+        switch(op){
+            case OP_INIT:
+                if (bytesLeft < (short)2)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                
+                short new_certificate_size=Util.getShort(buffer, buffer_offset);
+                if (new_certificate_size < 0)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                if (authentikey_certificate==null){
+                    // create array
+                    authentikey_certificate= new byte[new_certificate_size];
+                    authentikey_certificate_size=new_certificate_size;
+                }else{
+                    if (new_certificate_size>authentikey_certificate.length)
+                        ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                    authentikey_certificate_size=new_certificate_size;
+                }
+                break;
+                
+            case OP_PROCESS: 
+                if (bytesLeft < (short)4)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                short chunk_offset= Util.getShort(buffer, buffer_offset);
+                buffer_offset+=2;
+                short chunk_size= Util.getShort(buffer, buffer_offset);
+                buffer_offset+=2;
+                bytesLeft-=4;
+                if (bytesLeft < chunk_size)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                if (((short)(chunk_offset+chunk_size))>authentikey_certificate_size)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                
+                Util.arrayCopyNonAtomic(buffer, buffer_offset, authentikey_certificate, chunk_offset, chunk_size);
+                break;
+                
+            default:
+                ISOException.throwIt(SW_INCORRECT_P2);
+        }
+        return (short)0;
+    }
+    
+    /**
+     * This function exports the device certificate
+     *  
+     *  ins: 
+     *  p1: 0x00  
+     *  p2: Init-Update 
+     *  data(init): [ none ]
+     *  return(init): [ full_size(2b) ]
+     *  data(update): [ chunk_offset(2b) | chunk_size(2b) ]
+     *  return(update): [ chunk_data ] 
+     */
+    private short export_PKI_certificate(APDU apdu, byte[] buffer) {
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        byte op = buffer[ISO7816.OFFSET_P2];
+        switch(op){
+            case OP_INIT:
+                Util.setShort(buffer, (short)0, authentikey_certificate_size);
+                return (short)2; 
+                
+            case OP_PROCESS: 
+                short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+                if (bytesLeft < (short)4)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                
+                short buffer_offset = (short) (ISO7816.OFFSET_CDATA);
+                short chunk_offset= Util.getShort(buffer, buffer_offset);
+                buffer_offset+=2;
+                short chunk_size= Util.getShort(buffer, buffer_offset);
+                
+                if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                if (((short)(chunk_offset+chunk_size))>authentikey_certificate_size)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                Util.arrayCopyNonAtomic(authentikey_certificate, chunk_offset, buffer, (short)0, chunk_size);
+                return chunk_size; 
+                
+            default:
+                ISOException.throwIt(SW_INCORRECT_P2);
+                return (short)0; 
+        }
+    }
+    
+    /**
+     * This function locks the PKI config.
+     * Once it is locked, it is not possible to modify private key, certificate or allowed_card_AID.
+     *  
+     *  ins: 
+     *  p1: 0x00 
+     *  p2: 0x00 
+     *  data: [none]
+     *  return: [none]
+     */
+    private short lock_PKI(APDU apdu, byte[] buffer) {
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        personalizationDone=true;
+        return (short)0;
+    }
+    
+    /**
+     * This function performs a challenge-response to verify the authenticity of the device.
+     * The challenge is made of three parts: 
+     *          - a constant header
+     *          - a 32-byte challenge provided by the requester
+     *          - a 32-byte random nonce generated by the device
+     * The response is the signature over this challenge. 
+     * This signature can be verified with the certificate stored in the device.
+     * 
+     *  ins: 
+     *  p1: 0x00 
+     *  p2: 0x00 
+     *  data: [challenge1(32b)]
+     *  return: [challenge2(32b) | sig_size(2b) | sig]
+     */
+    private short challenge_response_pki(APDU apdu, byte[] buffer) {
+        // todo: require PIN?
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        if (bytesLeft < (short)32)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        
+        //copy all data into array
+        short offset=(short)0;
+        Util.arrayCopyNonAtomic(PKI_CHALLENGE_MSG, (short)0, recvBuffer, offset, (short)PKI_CHALLENGE_MSG.length);
+        offset+=PKI_CHALLENGE_MSG.length;
+        randomData.generateData(recvBuffer, offset, (short)32);
+        offset+=(short)32;
+        Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, offset, (short)32);
+        offset+=(short)32;
+         
+        //sign challenge
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.sign(recvBuffer, (short)0, offset, buffer, (short)34);
+        Util.setShort(buffer, (short)32, sign_size);
+        Util.arrayCopyNonAtomic(recvBuffer, (short)PKI_CHALLENGE_MSG.length, buffer, (short)0, (short)32);
+        
+        // verify response
+        sigECDSA.init(authentikey_public, Signature.MODE_VERIFY);
+        boolean is_valid= sigECDSA.verify(recvBuffer, (short)0, offset, buffer, (short)(34), sign_size);
+        if (!is_valid)
+            ISOException.throwIt(SW_SIGNATURE_INVALID);
+        
+        return (short)(32+2+sign_size);
     }
 
 } // end of class JAVA_APPLET
