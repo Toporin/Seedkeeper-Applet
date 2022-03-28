@@ -558,7 +558,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         authentikey_private= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
         Secp256k1.setCommonCurveParameters(authentikey_private);
         authentikey_public= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
-        Secp256k1.setCommonCurveParameters(authentikey_private);
+        Secp256k1.setCommonCurveParameters(authentikey_public);
         //authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
         //authentikey_pair.genKeyPair();
         randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
