@@ -64,9 +64,7 @@ import javacard.security.MessageDigest;
 import javacard.security.RandomData;
 import javacardx.crypto.Cipher;
 
-/**
- * Implements MUSCLE's Card Edge Specification.
- */
+
 public class SeedKeeper extends javacard.framework.Applet { 
 
     /* constants declaration */
@@ -86,7 +84,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     // Maximum number of keys handled by the Cardlet
     //private final static byte MAX_NUM_KEYS = (byte) 16;
     // Maximum number of seeds handled by the Cardlet
-    private final static byte MAX_NUM_SEEDS = (byte) 16; // TODO: set max?
+    //private final static byte MAX_NUM_SEEDS = (byte) 16; // TODO: set max?
     // Maximum number of PIN codes
     private final static byte MAX_NUM_PINS = (byte) 8; // TODO: set to 2?
 
@@ -179,6 +177,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_GET_ALLOWED_CARD_AID = (byte) 0x96;
     
     // reset to factory settings
+    // TODO: reset automatically when PIN is blocked and remove PUK?
     private final static byte INS_RESET_TO_FACTORY = (byte) 0xFF;
     
     /****************************************
@@ -294,8 +293,9 @@ public class SeedKeeper extends javacard.framework.Applet {
      * Instance variables declaration *
      ****************************************/
 
-    // PIN and PUK objects, allocated on demand
-    private OwnerPIN[] pins, ublk_pins;
+    // PIN and PUK objects, allocated during setup
+    //private OwnerPIN[] pins, ublk_pins;
+    private OwnerPIN pin, ublk_pin;
     
     //logger logs critical operations performed by the applet such as key export
     private Logger logger;
@@ -348,7 +348,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_OFFSET_EXPORT_NBSECURE=(byte) 4;
     private final static byte SECRET_OFFSET_EXPORT_COUNTER=(byte) 5; //(pubkey only) nb of time this pubkey has been used to export secret
     private final static byte SECRET_OFFSET_FINGERPRINT=(byte) 6; 
-    private final static byte SECRET_OFFSET_RFU1=(byte) 10; 
+    private final static byte SECRET_OFFSET_RFU1=(byte) 10; // todo: reference to another SID?
     private final static byte SECRET_OFFSET_RFU2=(byte) 11; 
     private final static byte SECRET_OFFSET_LABEL_SIZE=(byte) 12;
     private final static byte SECRET_OFFSET_LABEL=(byte) 13;
@@ -362,6 +362,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     
     private final static byte AES_BLOCKSIZE= (byte)16;
     private final static byte SIZE_2FA= (byte)20;
+
+    // secure channel
     private static final byte[] SECRET_CST_SC = {'s','e','c','k','e','y', 's','e','c','m','a','c'};
     private byte[] secret_sc_buffer;
     private AESKey secret_sc_sessionkey;
@@ -472,16 +474,17 @@ public class SeedKeeper extends javacard.framework.Applet {
         // FIXED: something should be done already here, not only with setup APDU
 
         /* If init pin code does not satisfy policies, internal error */
-        if (!CheckPINPolicy(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length))
-            ISOException.throwIt(SW_INTERNAL_ERROR);
+        // if (!CheckPINPolicy(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length))
+        //     ISOException.throwIt(SW_INTERNAL_ERROR);
 
-        ublk_pins = new OwnerPIN[MAX_NUM_PINS];
-        pins = new OwnerPIN[MAX_NUM_PINS];
+        //ublk_pins = new OwnerPIN[MAX_NUM_PINS];
+        //pins = new OwnerPIN[MAX_NUM_PINS];
+        pin = null;
 
         // DONE: pass in starting PIN setting with instantiation
         /* Setting initial PIN n.0 value */
-        pins[0] = new OwnerPIN((byte) 3, (byte) PIN_INIT_VALUE.length);
-        pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
+        //pins[0] = new OwnerPIN((byte) 3, (byte) PIN_INIT_VALUE.length); 
+        //pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
         
         // reset to factory
         try {
@@ -611,7 +614,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         // check SELECT APDU command
         if ((buffer[ISO7816.OFFSET_CLA] == 0) && (buffer[ISO7816.OFFSET_INS] == (byte) 0xA4))
             ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND); // spurious select (see https://github.com/Toporin/SatochipApplet/issues/11)
-        
+
         // verify the rest of commands have the
         // correct CLA byte, which specifies the
         // command structure
@@ -623,7 +626,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         // Reset to factory 
         //    To trigger reset to factory, user must insert and remove card a fixed number of time, 
         //    without sending any other command than 1 reset in between
-        if (ins == (byte) INS_RESET_TO_FACTORY){
+        if (ins == INS_RESET_TO_FACTORY){
             if (reset_array[0]==0){
                 reset_counter--;
                 reset_array[0]=(byte)1;
@@ -702,9 +705,9 @@ public class SeedKeeper extends javacard.framework.Applet {
             case INS_VERIFY_PIN:
                 sizeout= VerifyPIN(apdu, buffer);
                 break;
-            case INS_CREATE_PIN:
-                sizeout= CreatePIN(apdu, buffer);
-                break;
+            // case INS_CREATE_PIN: // DEPRECATED
+            //     sizeout= CreatePIN(apdu, buffer);
+            //     break;
             case INS_CHANGE_PIN:
                 sizeout= ChangePIN(apdu, buffer);
                 break;
@@ -714,9 +717,9 @@ public class SeedKeeper extends javacard.framework.Applet {
             case INS_LOGOUT_ALL:
                 sizeout= LogOutAll();
                 break;
-            case INS_LIST_PINS:
-                sizeout= ListPINs(apdu, buffer);
-                break;
+            // case INS_LIST_PINS: // DEPRECATED
+            //     sizeout= ListPINs(apdu, buffer);
+            //     break;
             case INS_GET_STATUS:
                 sizeout= GetStatus(apdu, buffer);
                 break;
@@ -831,16 +834,18 @@ public class SeedKeeper extends javacard.framework.Applet {
         byte numBytes = buffer[base++];
         bytesLeft--;
 
-        OwnerPIN pin = pins[0];
+        // Default PIN, ignore
 
-        if (!CheckPINPolicy(buffer, base, numBytes))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
+        //OwnerPIN pin = pins[0];
 
-        byte triesRemaining = pin.getTriesRemaining();
-        if (triesRemaining == (byte) 0x00)
-            ISOException.throwIt(SW_IDENTITY_BLOCKED);
-        if (!pin.check(buffer, base, numBytes))
-            ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
+        // if (!CheckPINPolicy(buffer, base, numBytes))
+        //     ISOException.throwIt(SW_INVALID_PARAMETER);
+
+        // byte triesRemaining = pin.getTriesRemaining();
+        // if (triesRemaining == (byte) 0x00)
+        //     ISOException.throwIt(SW_IDENTITY_BLOCKED);
+        // if (!pin.check(buffer, base, numBytes))
+        //     ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
 
         base += numBytes;
         bytesLeft-=numBytes;
@@ -850,23 +855,29 @@ public class SeedKeeper extends javacard.framework.Applet {
         numBytes = buffer[base++];
         bytesLeft-=3;
 
+        // PIN0
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER); 
 
-        pins[0] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);//TODO: new pin or update pin?
-        pins[0].update(buffer, base, numBytes);
+        if (pin == null)
+            pin = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
+        pin.update(buffer, base, numBytes);
+
+//        pins[0] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);//TODO: new pin or update pin?
+//        pins[0].update(buffer, base, numBytes);
 
         base += numBytes;
         bytesLeft-=numBytes;
         numBytes = buffer[base++];
         bytesLeft--;
 
+        // PUK0
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        if (ublk_pins[0]==null)
-            ublk_pins[0] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
-        ublk_pins[0].update(buffer, base, numBytes);
+        if (ublk_pin == null)
+            ublk_pin = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
+        ublk_pin.update(buffer, base, numBytes);
 
         base += numBytes;
         bytesLeft-=numBytes;
@@ -876,24 +887,29 @@ public class SeedKeeper extends javacard.framework.Applet {
         numBytes = buffer[base++];
         bytesLeft-=3;
 
-        if (!CheckPINPolicy(buffer, base, numBytes))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
+        // PIN1 is deprecated, ignore
 
-        if (pins[1]==null)
-            pins[1] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
-        pins[1].update(buffer, base, numBytes);
+        // if (!CheckPINPolicy(buffer, base, numBytes))
+        //     ISOException.throwIt(SW_INVALID_PARAMETER);
+
+        // if (pins[1]==null)
+        //     pins[1] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
+        // pins[1].update(buffer, base, numBytes);
 
         base += numBytes;
         bytesLeft-=numBytes;
         numBytes = buffer[base++];
         bytesLeft--;
 
-        if (!CheckPINPolicy(buffer, base, numBytes))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
+        // PUK1 is deprecated, ignore
 
-        if (ublk_pins[1]==null)
-            ublk_pins[1] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
-        ublk_pins[1].update(buffer, base, numBytes);
+        // if (!CheckPINPolicy(buffer, base, numBytes))
+        //     ISOException.throwIt(SW_INVALID_PARAMETER);
+
+        // if (ublk_pins[1]==null)
+        //     ublk_pins[1] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
+        // ublk_pins[1].update(buffer, base, numBytes);
+        
         base += numBytes;
         bytesLeft-=numBytes;
 
@@ -973,7 +989,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         Util.arrayFillNonAtomic(card_label, (short)0, (short)card_label.length, (byte)0);
         
         // setup
-        pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
+        pin.update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
         setupDone=false;
         
         // update log
@@ -997,7 +1013,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short generateMasterseed(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         // log operation
@@ -1078,7 +1094,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short generate2FASecret(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         // log operation
@@ -1160,7 +1176,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short importSecret(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         lock_transport_mode= buffer[ISO7816.OFFSET_P1];
@@ -1442,9 +1458,10 @@ public class SeedKeeper extends javacard.framework.Applet {
     ////////////////
     
     /** 
-     * This function exports a secret in plaintext to the host.
-     * Data is encrypted during transport through the Secure Channel
+     * This function exports a secret in plaintext or encrypted to the host.
+     * For plaintext export, data is encrypted during transport through the Secure Channel
      * but the host has access to the data in plaintext.
+     * For secure export, an encryption key is generated using ECDH.
      * 
      * ins: 0xA2
      * p1: 0x01 (plain export) or 0x02 (secure export)
@@ -1458,7 +1475,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short exportSecret(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         lock_transport_mode= buffer[ISO7816.OFFSET_P1];
@@ -1708,7 +1725,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short listSecretHeaders(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         short base=(short)0;
@@ -1752,7 +1769,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short printLogs(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         short buffer_offset=(short)0;
@@ -1789,7 +1806,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short resetSecret(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         // currently not supported
@@ -1799,6 +1816,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     }// end resetSecret
     
     /** 
+     * DEPRECATED
      * This function creates a PIN with parameters specified by the P1, P2 and DATA
      * values. P2 specifies the maximum number of consecutive unsuccessful
      * verifications before the PIN blocks. PIN can be created only if one of the logged identities
@@ -1810,40 +1828,40 @@ public class SeedKeeper extends javacard.framework.Applet {
      * data: [PIN_size(1b) | PIN | UBLK_size(1b) | UBLK] 
      * return: none
      */
-    private short CreatePIN(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
+    // private short CreatePIN(APDU apdu, byte[] buffer) {
+    //     // check that PIN[0] has been entered previously
+    //     if (!pin.isValidated())
+    //         ISOException.throwIt(SW_UNAUTHORIZED);
 
-        byte pin_nb = buffer[ISO7816.OFFSET_P1];
-        byte num_tries = buffer[ISO7816.OFFSET_P2];
+    //     byte pin_nb = buffer[ISO7816.OFFSET_P1];
+    //     byte num_tries = buffer[ISO7816.OFFSET_P2];
 
-        if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS) || (pins[pin_nb] != null))
-            ISOException.throwIt(SW_INCORRECT_P1);
-        /* Allow pin lengths > 127 (useful at all ?) */
-        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        // At least 1 character for PIN and 1 for unblock code (+ lengths)
-        if (bytesLeft < 4)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        byte pin_size = buffer[ISO7816.OFFSET_CDATA];
-        if (bytesLeft < (short) (1 + pin_size + 1))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        if (!CheckPINPolicy(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        byte ucode_size = buffer[(short) (ISO7816.OFFSET_CDATA + 1 + pin_size)];
-        if (bytesLeft != (short) (1 + pin_size + 1 + ucode_size))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        if (!CheckPINPolicy(buffer, (short) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1), ucode_size))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        pins[pin_nb] = new OwnerPIN(num_tries, PIN_MAX_SIZE);
-        pins[pin_nb].update(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size);
-        ublk_pins[pin_nb] = new OwnerPIN((byte) 3, PIN_MAX_SIZE);
-        // Recycle variable pin_size
-        pin_size = (byte) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1);
-        ublk_pins[pin_nb].update(buffer, pin_size, ucode_size);
+    //     if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS) || (pins[pin_nb] != null))
+    //         ISOException.throwIt(SW_INCORRECT_P1);
+    //     /* Allow pin lengths > 127 (useful at all ?) */
+    //     short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+    //     // At least 1 character for PIN and 1 for unblock code (+ lengths)
+    //     if (bytesLeft < 4)
+    //         ISOException.throwIt(SW_INVALID_PARAMETER);
+    //     byte pin_size = buffer[ISO7816.OFFSET_CDATA];
+    //     if (bytesLeft < (short) (1 + pin_size + 1))
+    //         ISOException.throwIt(SW_INVALID_PARAMETER);
+    //     if (!CheckPINPolicy(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size))
+    //         ISOException.throwIt(SW_INVALID_PARAMETER);
+    //     byte ucode_size = buffer[(short) (ISO7816.OFFSET_CDATA + 1 + pin_size)];
+    //     if (bytesLeft != (short) (1 + pin_size + 1 + ucode_size))
+    //         ISOException.throwIt(SW_INVALID_PARAMETER);
+    //     if (!CheckPINPolicy(buffer, (short) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1), ucode_size))
+    //         ISOException.throwIt(SW_INVALID_PARAMETER);
+    //     pins[pin_nb] = new OwnerPIN(num_tries, PIN_MAX_SIZE);
+    //     pins[pin_nb].update(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size);
+    //     ublk_pins[pin_nb] = new OwnerPIN((byte) 3, PIN_MAX_SIZE);
+    //     // Recycle variable pin_size
+    //     pin_size = (byte) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1);
+    //     ublk_pins[pin_nb].update(buffer, pin_size, ucode_size);
 
-        return (short)0;
-    }
+    //     return (short)0;
+    // }
 
     /** 
      * This function verifies a PIN number sent by the DATA portion. The length of
@@ -1852,20 +1870,26 @@ public class SeedKeeper extends javacard.framework.Applet {
      * blocks, then an UnblockPIN command can be issued.
      * 
      * ins: 0x42
-     * p1: PIN number (0x00-0x07)
+     * p1: 0x00 (PIN number)
      * p2: 0x00
      * data: [PIN] 
      * return: none (throws an exception in case of wrong PIN)
      */
     private short VerifyPIN(APDU apdu, byte[] buffer) {
         byte pin_nb = buffer[ISO7816.OFFSET_P1];
-        if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS))
-            ISOException.throwIt(SW_INCORRECT_P1);
-        OwnerPIN pin = pins[pin_nb];
-        if (pin == null)
+        // if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS))
+        //     ISOException.throwIt(SW_INCORRECT_P1);
+        if (pin_nb != 0)
             ISOException.throwIt(SW_INCORRECT_P1);
         if (buffer[ISO7816.OFFSET_P2] != 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
+
+        //OwnerPIN pin = pins[pin_nb];
+        if (pin == null)
+            return (short)0; //verifyPIN does not fail if no PIN (i.e. before setup)
+            //ISOException.throwIt(SW_INCORRECT_P1);
+        
+
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         /*
          * Here I suppose the PIN code is small enough to enter in the buffer
@@ -1894,7 +1918,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      * the new PIN codes. 
      * 
      * ins: 0x44
-     * p1: PIN number (0x00-0x07)
+     * p1: 0x00 (PIN number)
      * p2: 0x00
      * data: [PIN_size(1b) | old_PIN | PIN_size(1b) | new_PIN ] 
      * return: none (throws an exception in case of wrong PIN)
@@ -1906,13 +1930,15 @@ public class SeedKeeper extends javacard.framework.Applet {
          * support reading PINs in multiple read()s
          */
         byte pin_nb = buffer[ISO7816.OFFSET_P1];
-        if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS))
-            ISOException.throwIt(SW_INCORRECT_P1);
-        OwnerPIN pin = pins[pin_nb];
-        if (pin == null)
+        // if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS))
+        //     ISOException.throwIt(SW_INCORRECT_P1);
+        if (pin_nb != 0)
             ISOException.throwIt(SW_INCORRECT_P1);
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
+        if (pin == null)
+            ISOException.throwIt(SW_INCORRECT_P1);
+        
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         // At least 1 character for each PIN code
         if (bytesLeft < 4)
@@ -1949,17 +1975,20 @@ public class SeedKeeper extends javacard.framework.Applet {
      * DATA portion. The P3 byte specifies the unblock code length. 
      * 
      * ins: 0x46
-     * p1: PIN number (0x00-0x07)
+     * p1: 0x00 (PUK number)
      * p2: 0x00
      * data: [PUK] 
      * return: none (throws an exception in case of wrong PUK)
      */
     private short UnblockPIN(APDU apdu, byte[] buffer) {
         byte pin_nb = buffer[ISO7816.OFFSET_P1];
-        if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS))
+        if (pin_nb  != 0)
             ISOException.throwIt(SW_INCORRECT_P1);
-        OwnerPIN pin = pins[pin_nb];
-        OwnerPIN ublk_pin = ublk_pins[pin_nb];
+        if (buffer[ISO7816.OFFSET_P2] != 0x00)
+            ISOException.throwIt(SW_INCORRECT_P2);
+        
+        // OwnerPIN pin = pins[pin_nb];
+        // OwnerPIN ublk_pin = ublk_pins[pin_nb];
         if (pin == null)
             ISOException.throwIt(SW_INCORRECT_P1);
         if (ublk_pin == null)
@@ -1967,8 +1996,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         // If the PIN is not blocked, the call is inconsistent
         if (pin.getTriesRemaining() != 0)
             ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
-        if (buffer[ISO7816.OFFSET_P2] != 0x00)
-            ISOException.throwIt(SW_INCORRECT_P2);
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         /*
          * Here I suppose the PIN code is small enough to fit into the buffer
@@ -1991,16 +2018,14 @@ public class SeedKeeper extends javacard.framework.Applet {
     }
 
     private short LogOutAll() {
+        if (pin != null)
+            pin.reset();
         logged_ids = (short) 0x0000; // Nobody is logged in
-        byte i;
-        for (i = (byte) 0; i < MAX_NUM_PINS; i++)
-            if (pins[i] != null)
-                pins[i].reset();
-
         return (short)0;
     }
 
     /**
+     * DEPRECATED
      * This function returns a 2 byte bit mask of the available PINs that are currently in
      * use. Each set bit corresponds to an active PIN.
      * 
@@ -2010,30 +2035,30 @@ public class SeedKeeper extends javacard.framework.Applet {
      *  data: none
      *  return: [RFU(1b) | PIN_mask(1b)]
      */
-    private short ListPINs(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
+    // private short ListPINs(APDU apdu, byte[] buffer) {
+    //     // check that PIN[0] has been entered previously
+    //     if (!pin.isValidated())
+    //         ISOException.throwIt(SW_UNAUTHORIZED);
 
-        // Checking P1 & P2
-        if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
-            ISOException.throwIt(SW_INCORRECT_P1);
-        if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
-            ISOException.throwIt(SW_INCORRECT_P2);
-        byte expectedBytes = buffer[ISO7816.OFFSET_LC];
-        if (expectedBytes != (short) 2)
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        // Build the PIN bit mask
-        short mask = (short) 0x00;
-        short b;
-        for (b = (short) 0; b < MAX_NUM_PINS; b++)
-            if (pins[b] != null)
-                mask |= (short) (((short) 0x01) << b);
-        // Fill the buffer
-        Util.setShort(buffer, (short) 0, mask);
-        // Send response
-        return (short)2;
-    }
+    //     // Checking P1 & P2
+    //     if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
+    //         ISOException.throwIt(SW_INCORRECT_P1);
+    //     if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
+    //         ISOException.throwIt(SW_INCORRECT_P2);
+    //     byte expectedBytes = buffer[ISO7816.OFFSET_LC];
+    //     if (expectedBytes != (short) 2)
+    //         ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+    //     // Build the PIN bit mask
+    //     short mask = (short) 0x00;
+    //     short b;
+    //     for (b = (short) 0; b < MAX_NUM_PINS; b++)
+    //         if (pins[b] != null)
+    //             mask |= (short) (((short) 0x01) << b);
+    //     // Fill the buffer
+    //     Util.setShort(buffer, (short) 0, mask);
+    //     // Send response
+    //     return (short)2;
+    // }
 
     /**
      * This function retrieves general information about the Applet running on the smart
@@ -2063,10 +2088,10 @@ public class SeedKeeper extends javacard.framework.Applet {
         buffer[pos++] = APPLET_MINOR_VERSION; // Minor Applet version n.
         // PIN/PUK remaining tries available
         if (setupDone){
-            buffer[pos++] = pins[0].getTriesRemaining();
-            buffer[pos++] = ublk_pins[0].getTriesRemaining();
-            buffer[pos++] = pins[1].getTriesRemaining();
-            buffer[pos++] = ublk_pins[1].getTriesRemaining();
+            buffer[pos++] = pin.getTriesRemaining();
+            buffer[pos++] = ublk_pin.getTriesRemaining();
+            buffer[pos++] = (byte) 0; //pins[1].getTriesRemaining();
+            buffer[pos++] = (byte) 0; //ublk_pins[1].getTriesRemaining();
         } else {
             buffer[pos++] = (byte) 0;
             buffer[pos++] = (byte) 0;
@@ -2104,7 +2129,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short card_label(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         byte op = buffer[ISO7816.OFFSET_P2];
@@ -2175,7 +2200,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short getAuthentikey(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         // get the partial authentikey public key...
@@ -2327,11 +2352,12 @@ public class SeedKeeper extends javacard.framework.Applet {
      *  return: [signature]
      */
     private short sign_PKI_CSR(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
         if (personalizationDone)
             ISOException.throwIt(SW_PKI_ALREADY_LOCKED);
+        
+        // check that PIN[0] has been entered previously
+        if (pin != null && !pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);        
         
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytesLeft < (short)32)
@@ -2353,7 +2379,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short export_PKI_pubkey(APDU apdu, byte[] buffer) {
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (pin != null  && !pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         authentikey_public.getW(buffer, (short)0); 
@@ -2371,11 +2397,12 @@ public class SeedKeeper extends javacard.framework.Applet {
      *  return: [none]
      */
     private short import_PKI_certificate(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
         if (personalizationDone)
             ISOException.throwIt(SW_PKI_ALREADY_LOCKED);
+        
+        // check that PIN[0] has been entered previously
+        if (pin != null && !pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
         
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         short buffer_offset = (short) (ISO7816.OFFSET_CDATA);
@@ -2437,7 +2464,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short export_PKI_certificate(APDU apdu, byte[] buffer) {
         // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        if (pin != null && !pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         byte op = buffer[ISO7816.OFFSET_P2];
@@ -2480,7 +2507,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      *  return: [none]
      */
     private short lock_PKI(APDU apdu, byte[] buffer) {
-        if (!pins[0].isValidated())
+        if (pin != null  && !pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         personalizationDone=true;
         return (short)0;
@@ -2503,7 +2530,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      */
     private short challenge_response_pki(APDU apdu, byte[] buffer) {
         // todo: require PIN?
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
