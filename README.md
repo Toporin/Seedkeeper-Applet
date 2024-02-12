@@ -128,6 +128,10 @@ You can build the javacard CAP files or use the last [release](https://github.co
 
 To generate the CAP file from the sources, you can use the Eclipse IDE with the [ant-javacard](https://github.com/martinpaljak/ant-javacard) Ant task (see the instruction on the ant-javacard github repository).
 
+In command line, simply type:
+```ant```
+
+
 For installation, refer to the [Satochip applet repository](https://github.com/Toporin/SatoChipApplet). 
 
 # License
