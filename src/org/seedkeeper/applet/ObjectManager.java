@@ -15,7 +15,7 @@ import javacard.framework.ISOException;
  * Notation: 
  *  Base address: starting address of the object's header
  *  Data address: starting address of the object's data
- *  Data_address= Base_adresss + OBJ_H_DATA
+ *  Data_address= Base_adresss + OBJ_HEADER_SIZE
  * 
  * <p>
  * 
@@ -37,13 +37,10 @@ import javacard.framework.ISOException;
 
 public class ObjectManager {
 
-    //public final static byte OBJ_ACL_SIZE = (byte) 6;
-
-    private final static byte OBJ_HEADER_SIZE = (byte) (6 + 2);//private final static byte OBJ_HEADER_SIZE = (byte) (6 + OBJ_ACL_SIZE + 2);
+    private final static byte OBJ_HEADER_SIZE = (byte) (6 + 2);
     private final static byte OBJ_H_NEXT = (byte) 0; // Short size;
     private final static byte OBJ_H_CLASS = (byte) 2; // Short ocj_class;
     public  final static byte OBJ_H_ID = (byte) 4; // Short obj_id;
-    //private final static byte OBJ_H_ACL = (byte) 6; // Byte[OBJ_ACL_SIZE] acl;
     private final static byte OBJ_H_SIZE = (byte) 6;//12; // Short size;
     //private final static byte OBJ_H_DATA = (byte) 8;//14;
 
@@ -54,7 +51,7 @@ public class ObjectManager {
      * Size of an Object Record filled by getFirstRecord() or getNextRecord():
      * ID, Size, ACL
      */
-    public final static short RECORD_SIZE = (short) (4 + 4); //(short) (4 + 4 + OBJ_ACL_SIZE);
+    //public final static short RECORD_SIZE = (short) (4 + 4);
 
     /**
      * Iterator on objects. Stores the offset of the last retrieved object's
@@ -79,8 +76,6 @@ public class ObjectManager {
      *            memory.
      */
     public ObjectManager(short mem_size) {//(MemoryManager mem_ref) {
-        //mem = mem_ref;
-        // map = new Map();
         mem= new MemoryManager(mem_size);
         obj_list_head = MemoryManager.NULL_OFFSET;
     }

@@ -33,8 +33,7 @@ import javacard.framework.Util;
 
 public class MemoryManager {
     /** Special offset value used as invalid offset */
-    public final static short NULL_OFFSET = (short) 0xFFFF; // Also used as End
-    // Of List
+    public final static short NULL_OFFSET = (short) 0xFFFF; // Also used as End Of List
     private final static byte NODE_SIZE = (byte) 4;
 
     // memoryManager size: should not change once set
