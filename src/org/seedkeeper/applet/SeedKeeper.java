@@ -413,10 +413,10 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private Cipher aes128;
     private MessageDigest sha256;
 
-    // reset to factory
-    private byte[] reset_array;
-    private final static byte MAX_RESET_COUNTER= (byte)5;
-    private byte reset_counter=MAX_RESET_COUNTER;
+    // reset to factory // TODO DEPRECATE
+    // private byte[] reset_array;
+    // private final static byte MAX_RESET_COUNTER= (byte)5;
+    // private byte reset_counter=MAX_RESET_COUNTER;
     
     /*********************************************
      *  BIP32 Hierarchical Deterministic Wallet  *
@@ -487,11 +487,11 @@ public class SeedKeeper extends javacard.framework.Applet {
         //pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
         
         // reset to factory
-        try {
-            reset_array = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
-        } catch (SystemException e) {
-            ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
-        }
+        // try {
+        //     reset_array = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
+        // } catch (SystemException e) {
+        //     ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
+        // }
         
         // Temporary working arrays
         try {
@@ -623,29 +623,30 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         byte ins = buffer[ISO7816.OFFSET_INS];
         
+        // TODO DEPRECATE
         // Reset to factory 
         //    To trigger reset to factory, user must insert and remove card a fixed number of time, 
         //    without sending any other command than 1 reset in between
-        if (ins == INS_RESET_TO_FACTORY){
-            if (reset_array[0]==0){
-                reset_counter--;
-                reset_array[0]=(byte)1;
-            }else{
-                // if INS_RESET_TO_FACTORY is sent after any instruction, the reset process is aborted.
-                reset_counter=MAX_RESET_COUNTER;
-                ISOException.throwIt((short)(SW_RESET_TO_FACTORY + 0xFF));
-            }
-            if (reset_counter== 0) {
-                reset_counter=MAX_RESET_COUNTER;
-                resetToFactory();
-                ISOException.throwIt(SW_RESET_TO_FACTORY);
-            }
-            ISOException.throwIt((short)(SW_RESET_TO_FACTORY + reset_counter));
-        }
-        else{
-            reset_counter=MAX_RESET_COUNTER;
-            reset_array[0]=(byte)1;
-        }
+        // if (ins == INS_RESET_TO_FACTORY){
+        //     if (reset_array[0]==0){
+        //         reset_counter--;
+        //         reset_array[0]=(byte)1;
+        //     }else{
+        //         // if INS_RESET_TO_FACTORY is sent after any instruction, the reset process is aborted.
+        //         reset_counter=MAX_RESET_COUNTER;
+        //         ISOException.throwIt((short)(SW_RESET_TO_FACTORY + 0xFF));
+        //     }
+        //     if (reset_counter== 0) {
+        //         reset_counter=MAX_RESET_COUNTER;
+        //         resetToFactory();
+        //         ISOException.throwIt(SW_RESET_TO_FACTORY);
+        //     }
+        //     ISOException.throwIt((short)(SW_RESET_TO_FACTORY + reset_counter));
+        // }
+        // else{
+        //     reset_counter=MAX_RESET_COUNTER;
+        //     reset_array[0]=(byte)1;
+        // }
         
         // prepare APDU buffer
         if (ins != INS_GET_STATUS){
@@ -1973,6 +1974,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     /**
      * This function unblocks a PIN number using the unblock code specified in the
      * DATA portion. The P3 byte specifies the unblock code length. 
+     * If the PIN is blocked and the PUK is blocked, proceed to reset to factory.
      * 
      * ins: 0x46
      * p1: 0x00 (PUK number)
@@ -2009,6 +2011,11 @@ public class SeedKeeper extends javacard.framework.Applet {
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!ublk_pin.check(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft)){
             logger.createLog(INS_UNBLOCK_PIN, (short)-1, (short)-1, (short)(SW_PIN_FAILED + triesRemaining - 1) );
+            // if PUK is blocked, proceed to factory reset
+            if (ublk_pin.getTriesRemaining() == (byte) 0x00){
+                resetToFactory();
+                ISOException.throwIt(SW_RESET_TO_FACTORY);
+            }
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         }
 
