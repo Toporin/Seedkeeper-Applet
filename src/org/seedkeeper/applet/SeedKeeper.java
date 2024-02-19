@@ -385,12 +385,6 @@ public class SeedKeeper extends javacard.framework.Applet {
     private byte[] recvBuffer; 
     private byte[] tmpBuffer; //used for hmac computation
     private byte[] tmpBuffer2; //used in securechannel
-    
-    /*
-     * Logged identities: this is used for faster access control, so we don't
-     * have to ping each PIN object
-     */
-    private short logged_ids;
 
     /* For the setup function - should only be called once */
     private boolean setupDone = false;
@@ -933,21 +927,12 @@ public class SeedKeeper extends javacard.framework.Applet {
             bytesLeft-=(short)2;
         }
         
-        logged_ids = 0x0000; // No identities logged in
         om_nextid= (short)0;
         setupDone = true;
         return (short)0;//nothing to return
     }
 
     /********** UTILITY FUNCTIONS **********/
-
-    /**
-     * Registers logout of an identity. This must be called anycase when a PIN
-     * verification or external authentication fail
-     */
-    private void LogoutIdentity(byte id_nb) {
-        logged_ids &= (short) ~(0x0001 << id_nb);
-    }
 
     /** Checks if PIN policies are satisfied for a PIN code */
     private boolean CheckPINPolicy(byte[] pin_buffer, short pin_offset, byte pin_size) {
@@ -1812,7 +1797,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         
         // currently not supported
         ISOException.throwIt(SW_UNSUPPORTED_FEATURE);
-        
+
         return (short)0;
     }// end resetSecret
     
@@ -1903,13 +1888,9 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) ISO7816.OFFSET_CDATA, (byte) bytesLeft)) {
-            LogoutIdentity(pin_nb);
             logger.createLog(INS_VERIFY_PIN, (short)-1, (short)-1, (short)(SW_PIN_FAILED + triesRemaining - 1) );
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         }
-
-        // Actually register that PIN has been successfully verified.
-        logged_ids |= (short) (0x0001 << pin_nb);
 
         return (short)0;
     }
@@ -1959,14 +1940,11 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size)) {
-            LogoutIdentity(pin_nb);
             logger.createLog(INS_CHANGE_PIN, (short)-1, (short)-1, (short)(SW_PIN_FAILED + triesRemaining - 1) );
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         }
 
         pin.update(buffer, (short) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1), new_pin_size);
-        // JC specifies this resets the validated flag. So we do.
-        logged_ids &= (short) ((short) 0xFFFF ^ (0x01 << pin_nb));
 
         return (short)0;
     }
@@ -2027,7 +2005,6 @@ public class SeedKeeper extends javacard.framework.Applet {
     private short LogOutAll() {
         if (pin != null)
             pin.reset();
-        logged_ids = (short) 0x0000; // Nobody is logged in
         return (short)0;
     }
 
