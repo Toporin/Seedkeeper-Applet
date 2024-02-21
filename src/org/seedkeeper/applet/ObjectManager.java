@@ -23,7 +23,7 @@ import javacard.framework.ISOException;
  * 
  * <pre>
  *   short next (2 byte)
- *   short obj_class (2 bytes)
+ *   short obj_class (2 bytes) // TODO: remove - unused?
  *   short obj_id (2 bytes)
  *   //byte[] ACL (6 bytes) // removed
  *   short obj_size (2 bytes)
@@ -201,8 +201,9 @@ public class ObjectManager {
      *            Object ID (Type and ID form a generic 4 bytes identifier)
      * @param secure
      *            If true, object memory is zeroed before being released.
+     * @return true if object was destroyed, false otherwise
      */
-    public void destroyObject(short type, short id, boolean secure) {
+    public boolean destroyObject(short type, short id, boolean secure) {
         short base = obj_list_head;
         short prev = MemoryManager.NULL_OFFSET;
         boolean found = false;
@@ -228,7 +229,10 @@ public class ObjectManager {
 
             // Free memory
             mem.free(base);
-        }
+            return true;
+        } 
+            
+        return false;
     }
 
     /**

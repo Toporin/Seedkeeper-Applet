@@ -309,12 +309,12 @@ public class SeedKeeper extends javacard.framework.Applet {
     // for each element: [id | mnemonic | passphrase | master_seed | encrypted_master_seed | label | status | settings ]
     // status: externaly/internaly generated, shamir, bip39 or electrum, 
     // settings: can be exported in clear, 
-    private final static short OM_SIZE= (short) 0xFFF; //todo
+    private final static short OM_SIZE= (short) 0xFFF; //todo: optimize memory for different cards?
     private ObjectManager om_secrets;
     private AESKey om_encryptkey; // used to encrypt sensitive data in object
     private Cipher om_aes128_ecb; // 
     private short om_nextid;
-    private final static short OM_TYPE= 0x00;
+    private final static short OM_TYPE= 0x00; // todo: refactor and remove (unused)
     
     // type of secrets stored
     private final static byte SECRET_TYPE_MASTER_SEED = (byte) 0x10;
@@ -1738,6 +1738,39 @@ public class SeedKeeper extends javacard.framework.Applet {
     }
 
     /** 
+     * This function reset a secret object in memory.
+     * TODO: evaluate security implications!
+     * 
+     * ins: 0xA5
+     * p1: 0
+     * p2: 0
+     * data: [ id(2b) ]
+     * return: (none)
+     * throws: SW_OBJECT_NOT_FOUND if no object with given sid found
+     */
+    private short resetSecret(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // get id from buffer
+        short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        if (bytes_left<2){
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        }
+        short id = Util.getShort(buffer, ISO7816.OFFSET_CDATA);
+
+        //find and delete object, zeroize memory by default!
+        boolean isReset = om_secrets.destroyObject(OM_TYPE, id, true);
+
+        if (!isReset){
+            ISOException.throwIt(SW_OBJECT_NOT_FOUND);
+        }
+
+        return (short)0;
+    }// end resetSecret
+
+    /** 
      * This function returns the logs stored in the card
      * 
      * This function must be initially called with the INIT option. 
@@ -1779,27 +1812,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         }
         return buffer_offset;
     }
-    
-    /** 
-     * This function reset a secret object in memory.
-     * TODO: evaluate security implications!
-     * 
-     * ins: 0xA5
-     * p1: 0
-     * p2: 0
-     * data: [ id(2b) ]
-     * return: (none)    
-     */
-    private short resetSecret(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pin.isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        // currently not supported
-        ISOException.throwIt(SW_UNSUPPORTED_FEATURE);
-
-        return (short)0;
-    }// end resetSecret
     
     /** 
      * DEPRECATED
