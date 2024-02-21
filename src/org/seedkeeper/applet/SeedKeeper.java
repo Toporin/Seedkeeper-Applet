@@ -320,6 +320,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_TYPE_MASTER_SEED = (byte) 0x10;
     private final static byte SECRET_TYPE_ENCRYPTED_MASTER_SEED = (byte) 0x20;
     private final static byte SECRET_TYPE_BIP39_MNEMONIC = (byte) 0x30;
+    private final static byte SECRET_TYPE_BIP39_MNEMONIC_V2 = (byte) 0x31;
     private final static byte SECRET_TYPE_ELECTRUM_MNEMONIC = (byte) 0x40;
     private final static byte SECRET_TYPE_SHAMIR_SECRET_SHARE = (byte) 0x50;
     private final static byte SECRET_TYPE_PRIVKEY = (byte) 0x60;
@@ -370,11 +371,12 @@ public class SeedKeeper extends javacard.framework.Applet {
     private Cipher secret_sc_aes128_cbc;
     private MessageDigest secret_sha256;
     
-    //debug
+    // Secret format for various secret types
     // common data_header: [ type(1b) | origin(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | expot_pubkey_counter(1b) | fingerprint (4b) | RFU(2b) | label_size(1b) | label ]
     // SECRET_TYPE_MASTER_SEED: [ size(1b) | seed_blob ]
     // SECRET_TYPE_ENCRYPTED_MASTER_SEED: [ size(1b) | seed_blob | passphrase_size(1b) | passphrase | e(1b) ]
     // SECRET_TYPE_BIP39_MNEMONIC: [mnemonic_size(1b) | mnemonic | passphrase_size(1b) | passphrase ]
+    // SECRET_TYPE_BIP39_MNEMONIC_V2: [wordlist_selector(1b) | entropy_size(1b) | entropy | passphrase_size(1b) | passphrase | masterseed_size(1b) | masterseed] where entropy is 16-32 bytes as defined in BIP39
     // SECRET_TYPE_ELECTRUM_MNEMONIC: [mnemonic_size(1b) | mnemonic | passphrase_size(1b) | passphrase ]
     // SECRET_TYPE_SHAMIR_SECRET_SHARE: [TODO]
     // SECRET_TYPE_PRIVKEY: [TODO]
