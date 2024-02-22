@@ -116,16 +116,17 @@ public class SeedKeeper extends javacard.framework.Applet {
     // private final static byte INS_GET_PUBLIC_FROM_PRIVATE= (byte)0x35;
 
     // External authentication
-    private final static byte INS_CREATE_PIN = (byte) 0x40; //TODO: remove?
+    //private final static byte INS_CREATE_PIN = (byte) 0x40; // deprecated
     private final static byte INS_VERIFY_PIN = (byte) 0x42;
     private final static byte INS_CHANGE_PIN = (byte) 0x44;
     private final static byte INS_UNBLOCK_PIN = (byte) 0x46;
     private final static byte INS_LOGOUT_ALL = (byte) 0x60;
 
     // Status information
-    private final static byte INS_LIST_PINS = (byte) 0x48;
+    //private final static byte INS_LIST_PINS = (byte) 0x48; // deprecated
     private final static byte INS_GET_STATUS = (byte) 0x3C;
     private final static byte INS_CARD_LABEL= (byte)0x3D;
+    private final static byte INS_SET_NFC_POLICY = (byte) 0x3E;
 
     // HD wallet
     //private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
@@ -177,7 +178,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_GET_ALLOWED_CARD_AID = (byte) 0x96;
     
     // reset to factory settings
-    // TODO: reset automatically when PIN is blocked and remove PUK?
+    // reset automatically when PIN is blocked and remove PUK?
     private final static byte INS_RESET_TO_FACTORY = (byte) 0xFF;
     
     /****************************************
@@ -204,7 +205,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     //public final static short SW_LOGGER_ERROR = (short) 0x9C0A;
 
     /** There have been memory problems on the card */
-    private final static short SW_NO_MEMORY_LEFT = ObjectManager.SW_NO_MEMORY_LEFT;
+    private final static short SW_NO_MEMORY_LEFT = ObjectManager.SW_NO_MEMORY_LEFT; // 0x9C01
     /** DEPRECATED - Required object is missing */
     private final static short SW_OBJECT_NOT_FOUND= (short) 0x9C08;
 
@@ -253,7 +254,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static short SW_SECURE_IMPORT_WRONG_MAC= (short) 0x9C33;
     /** Wrong Fingerprint when importing Secret through Secure import**/
     private final static short SW_SECURE_IMPORT_WRONG_FINGERPRINT= (short) 0x9C34;
-    
+
     /** HMAC errors */
     static final short SW_HMAC_UNSUPPORTED_KEYSIZE = (short) 0x9c1E;
     static final short SW_HMAC_UNSUPPORTED_MSGSIZE = (short) 0x9c1F;
@@ -267,6 +268,10 @@ public class SeedKeeper extends javacard.framework.Applet {
     /** PKI error */
     private final static short SW_PKI_ALREADY_LOCKED = (short) 0x9C40;
     //private final static short SW_KEYPAIR_MISMATCH = (short) 0x9C41;
+
+    /** NFC interface disabled **/
+    static final short SW_NFC_DISABLED = (short) 0x9C48;
+    static final short SW_NFC_BLOCKED = (short) 0x9C49;
     
     /** For instructions that have been deprecated*/
     private final static short SW_INS_DEPRECATED = (short) 0x9C26;
@@ -451,6 +456,12 @@ public class SeedKeeper extends javacard.framework.Applet {
     // additional options
     private short option_flags;
 
+    // NFC 
+    private static final byte NFC_ENABLED=0;
+    private static final byte NFC_DISABLED=1; // can be re-enabled at any time
+    private static final byte NFC_BLOCKED=2; // warning: cannot be re-enabled except with reset factory!
+    private byte nfc_policy;
+
     /*********************************************
      *               PKI objects                 *
      *********************************************/
@@ -476,6 +487,9 @@ public class SeedKeeper extends javacard.framework.Applet {
         //ublk_pins = new OwnerPIN[MAX_NUM_PINS];
         //pins = new OwnerPIN[MAX_NUM_PINS];
         pin = null;
+
+        // NFC is enabled by default, can be modified with INS_SET_NFC_POLICY
+        nfc_policy = NFC_ENABLED; 
 
         // DONE: pass in starting PIN setting with instantiation
         /* Setting initial PIN n.0 value */
@@ -583,6 +597,15 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         //todo: clear secure channel values?
         initialized_secure_channel=false;
+
+        // check nfc policy
+        if (nfc_policy == NFC_DISABLED || nfc_policy == NFC_BLOCKED){
+            // check that the contact interface is used
+            byte protocol = (byte) (APDU.getProtocol() & APDU.PROTOCOL_MEDIA_MASK);
+            if (protocol != APDU.PROTOCOL_MEDIA_USB && protocol != APDU.PROTOCOL_MEDIA_DEFAULT) {
+                ISOException.throwIt(SW_NFC_DISABLED);
+            }
+        }
 
         return true;
     }
@@ -722,6 +745,9 @@ public class SeedKeeper extends javacard.framework.Applet {
                 break;
             case INS_CARD_LABEL:
                 sizeout= card_label(apdu, buffer);
+                break;
+            case INS_SET_NFC_POLICY:
+                sizeout= setNfcPolicy(apdu, buffer);
                 break;
             case INS_BIP32_GET_AUTHENTIKEY:
                 sizeout= getBIP32AuthentiKey(apdu, buffer);
@@ -972,6 +998,9 @@ public class SeedKeeper extends javacard.framework.Applet {
         // reset all secrets in store
         om_secrets.resetObjectManager(true);
         
+        // reset NFC policy to enabled
+        nfc_policy = NFC_ENABLED;
+
         // reset card label
         card_label_size=0;
         Util.arrayFillNonAtomic(card_label, (short)0, (short)card_label.length, (byte)0);
@@ -2067,11 +2096,11 @@ public class SeedKeeper extends javacard.framework.Applet {
      *  p1: 0x00 
      *  p2: 0x00 
      *  data: none
-     *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) | needs2FA (1b) | is_seeded(1b) | setupDone(1b) | needs_secure_channel(1b)]
+     *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) | needs2FA (1b) | is_seeded(1b) | setupDone(1b) | needs_secure_channel(1b) | nfc_policy(1b)]
      */
     private short GetStatus(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        //if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        //if (!pin.isValidated())
         // ISOException.throwIt(SW_UNAUTHORIZED);
 
         if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
@@ -2079,6 +2108,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
 
+        // applet version
         short pos = (short) 0;
         buffer[pos++] = PROTOCOL_MAJOR_VERSION; // Major Card Edge Protocol version n.
         buffer[pos++] = PROTOCOL_MINOR_VERSION; // Minor Card Edge Protocol version n.
@@ -2096,22 +2126,28 @@ public class SeedKeeper extends javacard.framework.Applet {
             buffer[pos++] = (byte) 0;
             buffer[pos++] = (byte) 0;
         }
-        if (false) // needs_2FA => maintained for intercompatibility with Satochip but not (currently) used
+        // 2FA status
+        if (false) //  maintained for intercompatibility with Satochip but not (currently) used in seedkeeper
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
-        if (true) // bip32_seeded => maintained for intercompatibility with Satochip but not used
+        // bip32_seeded
+        if (true) // maintained for intercompatibility with Satochip but not used in seedkeeper
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
+        // setup status
         if (setupDone)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
+        // secure channel support
         if (needs_secure_channel)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
+        // NFC policy
+        buffer[pos++] = nfc_policy;
 
         return pos;
     }
@@ -2163,7 +2199,52 @@ public class SeedKeeper extends javacard.framework.Applet {
         
         return (short)0;
     }
-    
+
+    /**
+     * This function enables of disables the NFC interface.
+     * By default, NFC interface is enabled. 
+     * NFC access can only be changed through the contact interface.
+     * PIN must be validated to use this function.
+     * NFC access policy is defined with 1 byte:
+     *  - NFC_ENABLED: NFC enabled
+     *  - NFC_DISABLED: NFC disabled but can be reenabled
+     *  - NFC_BLOCKED: NFC disabled and can only be reenable by factory reset!
+     * 
+     * 
+     *  ins: 0x3E
+     *  p1: NFC access policy
+     *  p2: RFU (set specific permission policies for NFC interface)
+     *  data: (none)
+     *  return: (none)
+     */
+    private short setNfcPolicy(APDU apdu, byte[] buffer){
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+
+        // check that the contact interface is used
+        byte protocol = (byte) (APDU.getProtocol() & APDU.PROTOCOL_MEDIA_MASK);
+        if (protocol != APDU.PROTOCOL_MEDIA_USB && protocol != APDU.PROTOCOL_MEDIA_DEFAULT) {
+            ISOException.throwIt(SW_NFC_DISABLED);
+        }
+
+        // check if status change is allowed
+        // if NFC is blocked, it is not allowed to unblock it, except via factory reset!
+        if (nfc_policy == NFC_BLOCKED)
+            ISOException.throwIt(SW_NFC_BLOCKED);
+
+        // get new NFC status from P1
+        byte nfc_policy_new = buffer[ISO7816.OFFSET_P1];
+        if (nfc_policy_new<0 || nfc_policy_new>2)
+            ISOException.throwIt(SW_INCORRECT_P1);
+
+        // update NFC access policy
+        nfc_policy = nfc_policy_new;
+
+        return (short)0;
+    }
+
     /**
      * DEPRECATED - use exportAuthentikey() instead
      * This function returns the authentikey public key (uniquely derived from the Bip32 seed).
