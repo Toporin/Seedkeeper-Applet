@@ -81,10 +81,6 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
     private final static byte APPLET_MINOR_VERSION = (byte) 1;   
 
-    // Maximum number of keys handled by the Cardlet
-    //private final static byte MAX_NUM_KEYS = (byte) 16;
-    // Maximum number of seeds handled by the Cardlet
-    //private final static byte MAX_NUM_SEEDS = (byte) 16; // TODO: set max?
     // Maximum number of PIN codes
     private final static byte MAX_NUM_PINS = (byte) 8; // TODO: set to 2?
 
@@ -150,19 +146,16 @@ public class SeedKeeper extends javacard.framework.Applet {
 
     // SeedKeeper
     private final static byte INS_GENERATE_MASTERSEED= (byte)0xA0;
+    private final static byte INS_GENERATE_RANDOM_SECRET= (byte)0xA3;
     private final static byte INS_GENERATE_2FA_SECRET= (byte)0xAE; 
     private final static byte INS_IMPORT_SECRET= (byte)0xA1;
     private final static byte INS_EXPORT_SECRET= (byte)0xA2;
-    //private final static byte INS_IMPORT_PLAIN_SECRET= (byte)0xA1;
-    //private final static byte INS_EXPORT_PLAIN_SECRET= (byte)0xA2;
-    //private final static byte INS_IMPORT_ENCRYPTED_SECRET= (byte)0xA3;
-    //private final static byte INS_EXPORT_ENCRYPTED_SECRET= (byte)0xA5;
     private final static byte INS_RESET_SECRET= (byte)0xA5;
     private final static byte INS_LIST_SECRET_HEADERS= (byte)0xA6;
-    //private final static byte INS_IMPORT_SHAMIR_SHARED_SECRET= (byte)0xA7;
-    //private final static byte INS_EXPORT_SHAMIR_SHARED_SECRET= (byte)0xA8;
     private final static byte INS_PRINT_LOGS= (byte)0xA9;
     private final static byte INS_EXPORT_AUTHENTIKEY= (byte) 0xAD;
+    private final static byte INS_DERIVE_MASTER_PASSWORD= (byte) 0xAA;
+    
     
     // Personalization PKI support
     private final static byte INS_IMPORT_PKI_CERTIFICATE = (byte) 0x92;
@@ -254,6 +247,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static short SW_SECURE_IMPORT_WRONG_MAC= (short) 0x9C33;
     /** Wrong Fingerprint when importing Secret through Secure import**/
     private final static short SW_SECURE_IMPORT_WRONG_FINGERPRINT= (short) 0x9C34;
+    /** wrong secret type for the requested operation **/
+    private final static short SW_WRONG_SECRET_TYPE= (short) 0x9C35;
 
     /** HMAC errors */
     static final short SW_HMAC_UNSUPPORTED_KEYSIZE = (short) 0x9c1E;
@@ -332,9 +327,15 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_TYPE_PUBKEY = (byte) 0x70;
     private final static byte SECRET_TYPE_KEY= (byte) 0x80;
     private final static byte SECRET_TYPE_PASSWORD= (byte) 0x90;
+    private final static byte SECRET_TYPE_MASTER_PASSWORD= (byte) 0x91; // can be derived to generate many passwords
     private final static byte SECRET_TYPE_CERTIFICATE= (byte) 0xA0;
-    private final static byte SECRET_TYPE_2FA= (byte) 0xB0;
+    private final static byte SECRET_TYPE_2FA= (byte) 0xB0; // to deprecate and use SECRET_TYPE_KEY instead
+    private final static byte SECRET_TYPE_BITCOIN_DESCRIPTOR= (byte) 0xC0;
+    private final static byte SECRET_TYPE_DATA= (byte) 0xD0;
     
+    // subtype (optionnal, default = 0)
+    private final static byte SECRET_SUBTYPE_DEFAULT = (byte) 0x00;
+
     // export controls 
     private final static byte SECRET_EXPORT_ALLOWED = (byte) 0x01; //plain or encrypted
     private final static byte SECRET_EXPORT_SECUREONLY = (byte) 0x02; // only encrypted with authentikey
@@ -354,7 +355,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_OFFSET_EXPORT_NBSECURE=(byte) 4;
     private final static byte SECRET_OFFSET_EXPORT_COUNTER=(byte) 5; //(pubkey only) nb of time this pubkey has been used to export secret
     private final static byte SECRET_OFFSET_FINGERPRINT=(byte) 6; 
-    private final static byte SECRET_OFFSET_RFU1=(byte) 10; // todo: reference to another SID?
+    private final static byte SECRET_OFFSET_RFU1=(byte) 10; // can be used to provide subtype context about the key (TBD)
     private final static byte SECRET_OFFSET_RFU2=(byte) 11; 
     private final static byte SECRET_OFFSET_LABEL_SIZE=(byte) 12;
     private final static byte SECRET_OFFSET_LABEL=(byte) 13;
@@ -365,11 +366,16 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte MAX_LABEL_SIZE= (byte) 127; 
     private final static byte MAX_SEED_SIZE= (byte) 64; 
     private final static byte MIN_SEED_SIZE= (byte) 16;
+    private static final byte[] ENTROPY_LABEL = {'e','n','t','r','o','p','y'};
+
+    // secret size
+    private final static byte MAX_RANDOM_SIZE= (byte) 64; 
+    private final static byte MIN_RANDOM_SIZE= (byte) 16; 
     
     private final static byte AES_BLOCKSIZE= (byte)16;
     private final static byte SIZE_2FA= (byte)20;
 
-    // secure channel
+    // secure channel for secure secret import/export: the secret is encrypted and maced with a symmetric key derived using ECDH
     private static final byte[] SECRET_CST_SC = {'s','e','c','k','e','y', 's','e','c','m','a','c'};
     private byte[] secret_sc_buffer;
     private AESKey secret_sc_sessionkey;
@@ -377,16 +383,20 @@ public class SeedKeeper extends javacard.framework.Applet {
     private MessageDigest secret_sha256;
     
     // Secret format for various secret types
-    // common data_header: [ type(1b) | origin(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | expot_pubkey_counter(1b) | fingerprint (4b) | RFU(2b) | label_size(1b) | label ]
+    // common data_header: [ type(1b) | origin(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | export_pubkey_counter(1b) | fingerprint (4b) | RFU(2b) | label_size(1b) | label ]
     // SECRET_TYPE_MASTER_SEED: [ size(1b) | seed_blob ]
-    // SECRET_TYPE_ENCRYPTED_MASTER_SEED: [ size(1b) | seed_blob | passphrase_size(1b) | passphrase | e(1b) ]
+    // SECRET_TYPE_ENCRYPTED_MASTER_SEED: [ size(1b) | seed_blob | passphrase_size(1b) | passphrase | e(1b) ] //RFU
     // SECRET_TYPE_BIP39_MNEMONIC: [mnemonic_size(1b) | mnemonic | passphrase_size(1b) | passphrase ]
-    // SECRET_TYPE_BIP39_MNEMONIC_V2: [wordlist_selector(1b) | entropy_size(1b) | entropy | passphrase_size(1b) | passphrase | masterseed_size(1b) | masterseed] where entropy is 16-32 bytes as defined in BIP39
+    // SECRET_TYPE_BIP39_MNEMONIC_V2: [ masterseed_size(1b) | masterseed | wordlist_selector(1b) | entropy_size(1b) | entropy(<=32b) | passphrase_size(1b) | passphrase] where entropy is 16-32 bytes as defined in BIP39 (this format is backward compatible with SECRET_TYPE_MASTER_SEED)
     // SECRET_TYPE_ELECTRUM_MNEMONIC: [mnemonic_size(1b) | mnemonic | passphrase_size(1b) | passphrase ]
     // SECRET_TYPE_SHAMIR_SECRET_SHARE: [TODO]
-    // SECRET_TYPE_PRIVKEY: [TODO]
-    // SECRET_TYPE_PUBKEY: [keytype(1b) | keysize(1b) | key ]
-    // SECRET_TYPE_KEY: [keytype(1b) | keysize(1b) | key]
+    // SECRET_TYPE_PRIVKEY: [keysize(1b) | key ]
+    // SECRET_TYPE_PUBKEY: [keysize(1b) | key ]
+    // SECRET_TYPE_KEY: [keysize(1b) | key]
+    // SECRET_TYPE_PASSWORD: [password_size(1b) | password]
+    // SECRET_TYPE_MASTER_PASSWORD: [password_size(1b) | password]
+    // SECRET_TYPE_BITCOIN_DESCRIPTOR: [format(1b) | size(2b) | descriptor] // format: RFU
+    // SECRET_TYPE_DATA: [format(1b) | size(2b) | data]
 
     // Buffer for storing extended APDUs
     private byte[] recvBuffer; 
@@ -413,6 +423,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private Signature sigECDSA;
     //private Cipher aes128;
     private MessageDigest sha256;
+    private MessageDigest sha512;
 
     // reset to factory // TODO DEPRECATE
     // private byte[] reset_array;
@@ -425,7 +436,6 @@ public class SeedKeeper extends javacard.framework.Applet {
     
     // seed derivation
     private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
-    private static final byte[] BITCOIN_SEED2 = {'B','i','t','c','o','i','n',' ','s','e','e','d','2'};
     private static final short BIP32_KEY_SIZE= 32; // size of extended key and chain code is 256 bits
     // private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
 
@@ -449,7 +459,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private static final byte SIZE_SC_IV= 16;
     private static final byte SIZE_SC_IV_RANDOM=12;
     private static final byte SIZE_SC_IV_COUNTER=SIZE_SC_IV-SIZE_SC_IV_RANDOM;
-    private static final byte SIZE_SC_BUFFER=SIZE_SC_MACKEY+SIZE_SC_IV;
+    private static final byte SIZE_SC_BUFFER=SIZE_SC_MACKEY+SIZE_SC_IV; // 36
 
     //private ECPrivateKey bip32_authentikey; // key used to authenticate data
     
@@ -528,9 +538,11 @@ public class SeedKeeper extends javacard.framework.Applet {
         // shared cryptographic objects
         randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
         secret_sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
-        sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);   
+        sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
+        sha512 = MessageDigest.getInstance(MessageDigest.ALG_SHA_512, false);    
         sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false); 
         HmacSha160.init(tmpBuffer);
+        HmacSha512.init(tmpBuffer, sha512);
         try {
             keyAgreement = KeyAgreement.getInstance(ALG_EC_SVDP_DH_PLAIN_XY, false); 
         } catch (CryptoException e) {
@@ -557,7 +569,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         
         // Secret objects manager
         om_secrets= new ObjectManager(OM_SIZE);
-        randomData.generateData(recvBuffer, (short)0, (short)16);
+        randomData.generateData(recvBuffer, (short)0, (short)AES_BLOCKSIZE);
         om_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         om_encryptkey.setKey(recvBuffer, (short)0); // data must be exactly 16 bytes long
         om_aes128_ecb= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
@@ -758,6 +770,12 @@ public class SeedKeeper extends javacard.framework.Applet {
             case INS_GENERATE_2FA_SECRET:
                 sizeout= generate2FASecret(apdu, buffer);
                 break;
+            case INS_GENERATE_RANDOM_SECRET:
+                sizeout = generateRandomSecret(apdu, buffer);
+                break;
+            case INS_DERIVE_MASTER_PASSWORD:
+                sizeout= deriveMasterPassword(apdu, buffer);
+                break;
             case INS_IMPORT_SECRET:
                 sizeout= importSecret(apdu, buffer);
                 break;
@@ -810,16 +828,16 @@ public class SeedKeeper extends javacard.framework.Applet {
         else if (needs_secure_channel) { // encrypt response
             // buffer contains the data (sizeout)
             // for encryption, data is padded with PKCS#7
-            short blocksize=(short)16;
-            short padsize= (short) (blocksize - (sizeout%blocksize));
+            //short blocksize=(short)16;
+            short padsize= (short) (AES_BLOCKSIZE - sizeout%AES_BLOCKSIZE);
 
             Util.arrayCopy(buffer, (short)0, tmpBuffer, (short)0, sizeout);
             Util.arrayFillNonAtomic(tmpBuffer, sizeout, padsize, (byte)padsize);//padding
             Util.arrayCopy(sc_buffer, OFFSET_SC_IV, buffer, (short)0, SIZE_SC_IV);
             sc_aes128_cbc.init(sc_sessionkey, Cipher.MODE_ENCRYPT, sc_buffer, OFFSET_SC_IV, SIZE_SC_IV);
-            short sizeoutCrypt=sc_aes128_cbc.doFinal(tmpBuffer, (short)0, (short)(sizeout+padsize), buffer, (short) (18));
-            Util.setShort(buffer, (short)16, sizeoutCrypt);
-            sizeout= (short)(18+sizeoutCrypt);
+            short sizeoutCrypt=sc_aes128_cbc.doFinal(tmpBuffer, (short)0, (short)(sizeout+padsize), buffer, (short) (SIZE_SC_IV+2));
+            Util.setShort(buffer, (short)SIZE_SC_IV, sizeoutCrypt);
+            sizeout= (short)(SIZE_SC_IV+2+sizeoutCrypt);
             //send back
             apdu.setOutgoingAndSend((short) 0, sizeout);
         }
@@ -1176,7 +1194,301 @@ public class SeedKeeper extends javacard.framework.Applet {
         // Send response
         return (short)(2+SECRET_FINGERPRINT_SIZE);
     }
+
+    /** 
+     * This function generates a secret randomly within the SeedKeeper.
+     * Secret_type should be in [SECRET_TYPE_MASTER_SEED, SECRET_TYPE_MASTER_PASSWORD, SECRET_TYPE_PRIVKEY, SECRET_TYPE_KEY]
+     * Secret_subtype allows to provide more context for the secret, e.g. the type of the key (AES/DES or Secp256k1...). 
+     * if flag_save_enropy == 0x01: save a 'proof' that the secret used the external entropy provided
+     * Entropy is random data provided by the user and used in the secret random generation. 
+     * Entropy size should be <= to the secret size to be generated
+     * 
+     * ins: 0xA3
+     * p1: secret size in byte (between 16-64)
+     * p2: export_rights
+     * data: [ secret_type(1b) | secret_subtype(1b) | flag_save_enropy(1b) | label_size(1b) | label | entropy_size(1b) | entropy]
+     * return: [ id(2b) | fingerprint(4b) ]
+     */
+    private short generateRandomSecret(APDU apdu, byte[] buffer){
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        // log operation
+        logger.createLog(INS_GENERATE_RANDOM_SECRET, (short)-1, (short)-1, (short)0x0000);
+        
+        byte secret_size= buffer[ISO7816.OFFSET_P1];
+        if ((secret_size < MIN_RANDOM_SIZE) || (secret_size > MAX_RANDOM_SIZE) )
+            ISOException.throwIt(SW_INCORRECT_P1);
     
+        byte export_rights = buffer[ISO7816.OFFSET_P2];
+        if ((export_rights < SECRET_EXPORT_ALLOWED) || (export_rights > SECRET_EXPORT_FORBIDDEN) )
+            ISOException.throwIt(SW_INCORRECT_P2);
+        
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        if (bytesLeft<4)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+
+        short buffer_offset = ISO7816.OFFSET_CDATA;
+        byte secret_type = buffer[buffer_offset];
+        buffer_offset++;
+        byte secret_subtype = buffer[buffer_offset];
+        buffer_offset++;
+        byte flag_save_entropy = buffer[buffer_offset];
+        buffer_offset++;
+        short label_size= Util.makeShort((byte) 0x00, buffer[buffer_offset]);
+        buffer_offset++;
+        bytesLeft-=(short)4;
+        if (label_size> MAX_LABEL_SIZE)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        if (bytesLeft<= label_size) // also check for next byte entropy_size
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+
+        // check type
+        if ((secret_type != SECRET_TYPE_MASTER_SEED) &&
+            (secret_type != SECRET_TYPE_MASTER_PASSWORD) &&
+            (secret_type != SECRET_TYPE_PRIVKEY) &&
+            (secret_type != SECRET_TYPE_KEY)){
+            ISOException.throwIt(SW_WRONG_SECRET_TYPE);
+        }
+
+        // TODO: check size for all types
+        if (secret_type == SECRET_TYPE_MASTER_SEED){
+            if ((secret_size < MIN_SEED_SIZE) || (secret_size > MAX_SEED_SIZE) )
+                ISOException.throwIt(SW_INCORRECT_P1);
+        }
+        
+        // compute object size
+        short header_size = (short)(SECRET_HEADER_SIZE + label_size);
+        short secret_plain_size = (short)(1+secret_size); // all secret have the format [size(1b) | secret]
+        short pad_size = (short) (AES_BLOCKSIZE - (secret_plain_size)%AES_BLOCKSIZE);
+        short obj_size = (short) (header_size + secret_plain_size + pad_size);
+
+        // Check if object exists
+        while (om_secrets.exists(OM_TYPE, om_nextid)){
+            om_nextid++;
+        }
+        // create object
+        short obj_base= om_secrets.createObject(OM_TYPE, om_nextid, obj_size);
+
+        // save header to object
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_TYPE, secret_type);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_ORIGIN, SECRET_ORIGIN_ONCARD);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL, export_rights);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN, (byte)0);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, (byte)0);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_COUNTER, (byte)0);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU1, (byte)secret_subtype);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU2, (byte)0);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE, (byte) (label_size & 0x7f));
+        om_secrets.setObjectData(obj_base, SECRET_OFFSET_LABEL, buffer, buffer_offset, label_size);
+
+        // copy external entropy to recvBuffer
+        // recvBuffer map: [size_entropy(1b) | entropy_ext | entropy_gen(secret_size) | size_secret(1b) | secret(secret_size) |  fingerprint(4b)]
+        buffer_offset+= label_size;
+        bytesLeft-= label_size;
+        byte entropy_size = buffer[buffer_offset];
+        if (entropy_size > secret_size)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        buffer_offset++;
+        bytesLeft--;
+        if (bytesLeft < entropy_size)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, (short)1, entropy_size); // leave space for type and size if needed 
+        // generate random internal entropy
+        randomData.generateData(recvBuffer, (short)(1+entropy_size), (short)secret_size);
+        // secret is the sha512([external_entropy | internal_entropy]), trimmed to first secret_size bytes if secret_size<64
+        sha512.reset();
+        sha512.doFinal(recvBuffer, (short)1, (short)(entropy_size+secret_size), recvBuffer, (short)(1+entropy_size+secret_size+1));
+        // set secret subtype & size
+        short secret_offset = (short) (1+entropy_size+secret_size); 
+        recvBuffer[secret_offset] = secret_size;
+
+        // compute fingerprint
+        sha256.reset();
+        sha256.doFinal(recvBuffer, secret_offset, (short)(1+secret_size), recvBuffer, (short)(secret_offset+1+secret_size));
+        // set fingerprint in object
+        om_secrets.setObjectData(obj_base, SECRET_OFFSET_FINGERPRINT, recvBuffer, (short)(secret_offset+1+secret_size), SECRET_FINGERPRINT_SIZE);
+
+        //pad and encrypt secret for storage (padding overwrites partially the fingerprint)
+        Util.arrayFillNonAtomic(recvBuffer, (short)(secret_offset+1+secret_size), pad_size, (byte)pad_size);//padding
+        om_aes128_ecb.init(om_encryptkey, Cipher.MODE_ENCRYPT);
+        short enc_size= om_aes128_ecb.doFinal(recvBuffer, secret_offset, (short)(1+secret_size+pad_size), recvBuffer, secret_offset); // asset(enc_size == secret_plain_size+pad_size)
+        // set encrypted secret in object
+        om_secrets.setObjectData(obj_base, (short)(SECRET_HEADER_SIZE+label_size), recvBuffer, secret_offset, enc_size);
+        // overwrite plain secret
+        Util.arrayFillNonAtomic(recvBuffer, secret_offset, (short)(1+secret_size), (byte)0);
+        
+        // log operation
+        logger.updateLog(INS_GENERATE_RANDOM_SECRET, om_nextid, (short)-1, (short)0x9000);
+
+        // Fill the return buffer
+        Util.setShort(buffer, (short) 0, om_nextid);
+        om_secrets.getObjectData(obj_base, SECRET_OFFSET_FINGERPRINT, buffer, (short)2, SECRET_FINGERPRINT_SIZE);
+        om_nextid++;
+
+        // if requested, we can save entropy as a secret, this can be used to show that secret was generated by combining external & internal entropy)
+        if (flag_save_entropy == (byte)0x01){
+
+            // create partial log
+            logger.createLog(INS_GENERATE_RANDOM_SECRET, (short)-1, (short)-1, (short)0x0000);
+
+            header_size = (short)(SECRET_HEADER_SIZE + ENTROPY_LABEL.length);
+            secret_plain_size = (short)(1+entropy_size+secret_size); // entropy has a key format [size(1b) | secret]
+            pad_size = (short) (AES_BLOCKSIZE - (secret_plain_size)%AES_BLOCKSIZE);
+            obj_size = (short) (header_size + secret_plain_size + pad_size);
+            short secret_id= (short)(om_nextid-1); // reference to random secret previously created
+
+            // Check if object exists
+            while (om_secrets.exists(OM_TYPE, om_nextid)){
+                om_nextid++;
+            }
+            // create object
+            obj_base= om_secrets.createObject(OM_TYPE, om_nextid, obj_size);
+            
+            // save header to object
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_TYPE, SECRET_TYPE_KEY);
+            // TODO: add subtype
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_ORIGIN, SECRET_ORIGIN_ONCARD);
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL, export_rights);
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN, (byte)0);
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, (byte)0);
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_COUNTER, (byte)0);
+            // om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU1, (byte)(secret_id>>8));
+            // om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU2, (byte)(secret_id & 0xff));
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU1, (byte)0);
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU2, (byte)0);
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE, (byte)ENTROPY_LABEL.length);
+            om_secrets.setObjectData(obj_base, SECRET_OFFSET_LABEL, ENTROPY_LABEL, (short)0, (short)ENTROPY_LABEL.length);
+
+            // entropy is located in contiguous memory in recvBuffer 
+            // size_entropy(1b) | external_entropy(entropy_size) | internal_entropy(secret_size)]
+            //Util.setShort(recvBuffer, (short)0, (short)(entropy_size+secret_size)); // up to 128 bytes
+            short size= (short)(entropy_size+secret_size);
+            recvBuffer[(short)0] = (byte)(size & 0xff); // up to 128 bytes
+            // compute fingerprint
+            sha256.reset();
+            sha256.doFinal(recvBuffer, (short)0, (short)(1+entropy_size+secret_size), recvBuffer, (short)(1+entropy_size+secret_size));
+            // set fingerprint in object
+            om_secrets.setObjectData(obj_base, SECRET_OFFSET_FINGERPRINT, recvBuffer, (short)(1+entropy_size+secret_size), SECRET_FINGERPRINT_SIZE);
+
+            //pad and encrypt secret for storage (padding overwrites partially the fingerprint)
+            Util.arrayFillNonAtomic(recvBuffer, (short)(1+entropy_size+secret_size), pad_size, (byte)pad_size);//padding
+            om_aes128_ecb.init(om_encryptkey, Cipher.MODE_ENCRYPT);
+            enc_size= om_aes128_ecb.doFinal(recvBuffer, (short)0, (short)(1+entropy_size+secret_size+pad_size), recvBuffer, (short)0); // asset(enc_size == secret_plain_size+pad_size)
+            // set encrypted secret in object
+            om_secrets.setObjectData(obj_base, (short)(SECRET_HEADER_SIZE+ENTROPY_LABEL.length), recvBuffer, (short)0, enc_size);
+            // overwrite plain secret
+            Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)(1+entropy_size+secret_size), (byte)0);
+
+            // log operation
+            logger.updateLog(INS_GENERATE_RANDOM_SECRET, om_nextid, (short)-1, (short)0x9000);
+        
+            // Fill the return buffer
+            Util.setShort(buffer, (short)(2+SECRET_FINGERPRINT_SIZE), om_nextid);
+            om_secrets.getObjectData(obj_base, SECRET_OFFSET_FINGERPRINT, buffer, (short)(2+SECRET_FINGERPRINT_SIZE+2), SECRET_FINGERPRINT_SIZE);
+            om_nextid++;
+
+            // Send response
+            return (short)(4+2*SECRET_FINGERPRINT_SIZE);
+        }
+        // Send response
+        return (short)(2+SECRET_FINGERPRINT_SIZE);
+    }
+
+    
+    /** 
+     * This function derives and export a secret (password) from a master password and provided salt.
+     * Derivation is done using HMAC-SHA512 using the salt as key and master password as message.
+     * Currently, only plaintext export is suported.
+     * 
+     * ins: AA
+     * p1: 0x01 (plain import) or todo: secure export
+     * p2: 0x00
+     * data: [ master_password_sid(2b) | salt_size(1b) | salt_used_for_derivation (max 128 bytes) ]
+     * return: [ derived_data_size(2b) | derived_data | sig_size(2b) | authentikey_sig]
+     */
+    private short deriveMasterPassword(APDU apdu, byte[] buffer){
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // get id
+        short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        if (bytes_left<3){
+            ISOException.throwIt(SW_INVALID_PARAMETER);}
+        short buffer_offset = ISO7816.OFFSET_CDATA;
+        short lock_id= Util.getShort(buffer, buffer_offset);
+        buffer_offset+=2;
+
+        // get salt data (should be max 128 bytes)
+        short salt_size = Util.makeShort((byte) 0x00, buffer[buffer_offset]);
+        buffer_offset++;
+        if (bytes_left<(short)(3+salt_size)){
+            ISOException.throwIt(SW_INVALID_PARAMETER);}
+        
+        // currently, we do not support secure export, only plaintext
+        short lock_id_pubkey = (short)-1;
+
+        // log operation to be updated later
+        logger.createLog(INS_DERIVE_MASTER_PASSWORD, lock_id, lock_id_pubkey, (short)0x0000);
+                
+        // get master_password base address
+        short base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
+        if (base==(short)0xFFFF){
+            logger.updateLog(INS_DERIVE_MASTER_PASSWORD, lock_id, lock_id_pubkey, SW_OBJECT_NOT_FOUND);
+            ISOException.throwIt(SW_OBJECT_NOT_FOUND);
+        }
+        short obj_size= om_secrets.getSizeFromAddress(base);
+        //om_secrets.getObjectData(base, (short)0, recvBuffer, (short)0, obj_size);
+
+        // check type is correct
+        byte secret_type = om_secrets.getObjectByte(base, SECRET_OFFSET_TYPE);   
+        if (secret_type!=SECRET_TYPE_MASTER_PASSWORD){
+            logger.updateLog(INS_DERIVE_MASTER_PASSWORD, lock_id, lock_id_pubkey, SW_WRONG_SECRET_TYPE);
+            ISOException.throwIt(SW_WRONG_SECRET_TYPE);
+        }
+        // update derivation counter
+        byte counter = om_secrets.getObjectByte(base, SECRET_OFFSET_EXPORT_COUNTER);   
+        counter++; // incremented each time we derive a new key
+        om_secrets.setObjectByte(base, SECRET_OFFSET_EXPORT_COUNTER, counter);   
+
+        // copy encrypted secret to recv_buffer
+        short label_size= Util.makeShort((byte)0, om_secrets.getObjectByte(base, SECRET_OFFSET_LABEL_SIZE));
+        short base_offset = (short)(SECRET_HEADER_SIZE+label_size);
+        short base_remaining= (short)(obj_size-base_offset);
+        om_secrets.getObjectData(base, base_offset, recvBuffer, (short)0, base_remaining);
+
+        // decrypt secret in same buffer to recover master password
+        om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
+        short dec_size= om_aes128_ecb.update(recvBuffer, (short)0, base_remaining, recvBuffer, (short)0);
+        byte pad_size= recvBuffer[(short)(dec_size-1)];
+        dec_size-=pad_size;
+        short password_size = recvBuffer[(short)0];
+        if (password_size>=dec_size){ // password_size should be < dec_size
+            ISOException.throwIt(SW_INVALID_PARAMETER);}
+
+        // compute hmac(key, message), where key = salt and message = master password
+        short hmac_size=HmacSha512.computeHmacSha512(buffer, buffer_offset, salt_size, recvBuffer, (short)1, password_size, buffer, (short) 2);
+        Util.setShort(buffer, (short)0, hmac_size); //should be 64bytes           
+
+        // erase master password copy in revBuffer
+        Util.arrayFillNonAtomic(recvBuffer, (short)0, dec_size, (byte)0);
+
+        // finalize sign with authentikey
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(2+hmac_size), buffer, (short)(2+hmac_size+2));
+        Util.setShort(buffer, (short)(2+hmac_size), sign_size);
+                  
+        // update log
+        logger.updateLog(INS_DERIVE_MASTER_PASSWORD, lock_id, lock_id_pubkey, ISO7816.SW_NO_ERROR);
+
+        // the client can recover full public-key from the signature or
+        // by guessing the compression value () and verifying the signature... 
+        // buffer= [data_size(2b) | data | sigsize(2) | sig]
+        return (short)(2+hmac_size+2+sign_size);
+    }
+
     /** 
      * This function imports a secret in plaintext/encrypted from host.
      * 
@@ -1192,7 +1504,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      *      (final) [ id(2b) | fingerprint(4b) ]
      */
     private short importSecret(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
+        // check that PIN has been entered previously
         if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
@@ -1487,8 +1799,8 @@ public class SeedKeeper extends javacard.framework.Applet {
      * return: 
      *      (init):[ header | IV(16b) ]
      *      (next):[data_blob_size(2b) | data_blob ]
-     *      (last):[data_blob_size(2b) | data_blob | sig_size(1b) | authentikey_sig] if plain export
-     *             [data_blob_size(2b) | data_blob | hmac_size(1b) | hmac(20b)] if secure export 
+     *      (last):[data_blob_size(2b) | data_blob | sig_size(2b) | authentikey_sig] if plain export
+     *             [data_blob_size(2b) | data_blob | hmac_size(2b) | hmac(20b)] if secure export 
      */
     private short exportSecret(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
@@ -1784,6 +2096,9 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
+        // log operation
+        logger.createLog(INS_RESET_SECRET, (short)-1, (short)-1, (short)0x0000);
+
         // get id from buffer
         short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytes_left<2){
@@ -1795,7 +2110,12 @@ public class SeedKeeper extends javacard.framework.Applet {
         boolean isReset = om_secrets.destroyObject(OM_TYPE, id, true);
 
         if (!isReset){
+            // update log operation fail
+            logger.updateLog(INS_RESET_SECRET, id, (short)-1, SW_OBJECT_NOT_FOUND);
             ISOException.throwIt(SW_OBJECT_NOT_FOUND);
+        } else {
+            // update log operation success
+            logger.updateLog(INS_RESET_SECRET, id, (short)-1, ISO7816.SW_NO_ERROR);
         }
 
         return (short)0;

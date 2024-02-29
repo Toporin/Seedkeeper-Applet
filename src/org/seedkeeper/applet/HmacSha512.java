@@ -23,7 +23,6 @@ package org.seedkeeper.applet;
 import javacard.framework.ISOException;
 import javacard.framework.JCSystem;
 import javacard.framework.Util;
-import javacard.security.CryptoException;
 import javacard.security.MessageDigest;
 
 // very limited Hmac-SHA512 implementation
@@ -32,18 +31,31 @@ public class HmacSha512 {
     public static final short BLOCKSIZE=128; // 128 bytes 
     public static final short HASHSIZE=64;
     private static byte[] data;
+    private static MessageDigest sha512;
     
-    private static MessageDigest sha512;  
-    
-    public static void init(byte[] tmp){
+    public static void init(byte[] tmp, MessageDigest sha512_hash){
         data= tmp;
-        try {
-            sha512 = MessageDigest.getInstance(MessageDigest.ALG_SHA_512, false); 
-        } catch (CryptoException e) {
-            ISOException.throwIt(SeedKeeper.SW_UNSUPPORTED_FEATURE); // unsupported feature => use a more recent card!
-        }
+        sha512= sha512_hash;
     }
     
+
+    /**
+     * Compute the HMAC-SHA512 of given key and message.
+     * Uses a temporary buffer for intermediate computations as set in init().
+     * Result is written in the mac bytearray. 
+     * The mac bytearray can be the same as the key or message bytearray.
+     * 
+     * @param key the buffer storing the HMAC key
+     * @param key_offset offset for the key in buffer
+     * @param key_length the length of the key in bytes, should not exceed 128 bytes
+     * @param message the buffer storing the HMAC message
+     * @param message_offset offset for the message in buffer
+     * @param message_length the length of the message in bytes, should not exceed 64 bytes
+     * @param mac the buffer where the final result is written
+     * @param mac_offset offset for the computed mac in buffer
+     * @return the length in bytes of the HMAC result (64 bytes)
+     * 
+     * **/
     public static short computeHmacSha512(byte[] key, short key_offset, short key_length, 
             byte[] message, short message_offset, short message_length,
             byte[] mac, short mac_offset){

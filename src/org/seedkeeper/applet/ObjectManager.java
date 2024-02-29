@@ -39,7 +39,7 @@ public class ObjectManager {
 
     private final static byte OBJ_HEADER_SIZE = (byte) (6 + 2);
     private final static byte OBJ_H_NEXT = (byte) 0; // Short size;
-    private final static byte OBJ_H_CLASS = (byte) 2; // Short ocj_class;
+    private final static byte OBJ_H_CLASS = (byte) 2; // Short ocj_class; // todo: unused?
     public  final static byte OBJ_H_ID = (byte) 4; // Short obj_id;
     private final static byte OBJ_H_SIZE = (byte) 6;//12; // Short size;
     //private final static byte OBJ_H_DATA = (byte) 8;//14;
