@@ -129,7 +129,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     //private final static byte INS_BIP32_RESET_SEED= (byte) 0x77;
     private final static byte INS_BIP32_GET_AUTHENTIKEY= (byte) 0x73;
     //private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75;
-    // private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
+    private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
     // private final static byte INS_BIP32_SET_EXTENDED_PUBKEY= (byte) 0x74;
     // private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
     // private final static byte INS_SIGN_SHORT_MESSAGE= (byte) 0x72;
@@ -221,7 +221,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     /** For debugging purposes */
     private final static short SW_INTERNAL_ERROR = (short) 0x9CFF;
     // /** Very low probability error */
-    // private final static short SW_BIP32_DERIVATION_ERROR = (short) 0x9C0E;
+    private final static short SW_BIP32_DERIVATION_ERROR = (short) 0x9C0E;
     // /** Incorrect initialization of method */
     private final static short SW_INCORRECT_INITIALIZATION = (short) 0x9C13;
     /** Bip32 seed is not initialized => this is actually the authentikey*/
@@ -241,6 +241,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static short SW_LOCK_ERROR= (short) 0x9C30;
     /** Export not allowed **/
     private final static short SW_EXPORT_NOT_ALLOWED= (short) 0x9C31;
+    /** Usage not allowed **/
+    private final static short SW_USAGE_NOT_ALLOWED= (short) 0x9C36;
     /** Secret data is too long for import **/
     private final static short SW_IMPORTED_DATA_TOO_LONG= (short) 0x9C32;
     /** Wrong HMAC when importing Secret through Secure import**/
@@ -325,6 +327,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_TYPE_SHAMIR_SECRET_SHARE = (byte) 0x50;
     private final static byte SECRET_TYPE_PRIVKEY = (byte) 0x60;
     private final static byte SECRET_TYPE_PUBKEY = (byte) 0x70;
+    private final static byte SECRET_TYPE_PUBKEY_AUTHENTICATED = (byte) 0x71; //RFU authentikey signed with known PKI subca.
     private final static byte SECRET_TYPE_KEY= (byte) 0x80;
     private final static byte SECRET_TYPE_PASSWORD= (byte) 0x90;
     private final static byte SECRET_TYPE_MASTER_PASSWORD= (byte) 0x91; // can be derived to generate many passwords
@@ -332,16 +335,25 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_TYPE_2FA= (byte) 0xB0; // to deprecate and use SECRET_TYPE_KEY instead
     private final static byte SECRET_TYPE_BITCOIN_DESCRIPTOR= (byte) 0xC0;
     private final static byte SECRET_TYPE_DATA= (byte) 0xD0;
-    
+
     // subtype (optionnal, default = 0)
     private final static byte SECRET_SUBTYPE_DEFAULT = (byte) 0x00;
 
     // export controls 
+    private final static byte SECRET_EXPORT_MASK = (byte) 0x03; // mask for the export controls
+    private final static byte SECRET_EXPORT_FORBIDDEN = (byte) 0x00; // never allowed
     private final static byte SECRET_EXPORT_ALLOWED = (byte) 0x01; //plain or encrypted
     private final static byte SECRET_EXPORT_SECUREONLY = (byte) 0x02; // only encrypted with authentikey
-    private final static byte SECRET_EXPORT_AUTHENTICATED = (byte) 0x03; // TODO: only encrypted with certified authentikey
-    private final static byte SECRET_EXPORT_FORBIDDEN = (byte) 0x04; // never allowed
+    private final static byte SECRET_EXPORT_AUTHENTICATED = (byte) 0x03; // RFU: only encrypted with certified authentikey
     
+    // use controls: use a secret to perform specific operations
+    // For example a masterseed can be derived using BIP32, with extended keys exported
+    private final static byte SECRET_USAGE_MASK = (byte) 0x30; // mask for the export controls
+    private final static byte SECRET_USAGE_FORBIDDEN = (byte) 0x00; // never allowed
+    private final static byte SECRET_USAGE_ALLOWED = (byte) 0x10; // always allowed
+    private final static byte SECRET_USAGE_SECUREONLY = (byte) 0x20; // allowed only using encrypted export
+    private final static byte SECRET_USAGE_AUTHENTICATED = (byte) 0x30; // RFU: only encrypted with certified authentikey
+
     // origin
     private final static byte SECRET_ORIGIN_IMPORT_PLAIN= (byte) 0x01; 
     private final static byte SECRET_ORIGIN_IMPORT_SECURE = (byte) 0x02; 
@@ -436,8 +448,25 @@ public class SeedKeeper extends javacard.framework.Applet {
     
     // seed derivation
     private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
+    private static final byte BIP32_MAX_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
     private static final short BIP32_KEY_SIZE= 32; // size of extended key and chain code is 256 bits
-    // private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
+    
+    // offset in working buffer
+    // recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | buffer(index)(32b) | current_extended_key(32b) | current_chain_code(32b) | pubkey(65b) | path(40b)]
+    private static final short BIP32_OFFSET_PARENT_CHAINCODE=0;
+    private static final short BIP32_OFFSET_PARENT_SEPARATOR=BIP32_KEY_SIZE;
+    private static final short BIP32_OFFSET_PARENT_KEY=BIP32_KEY_SIZE+1;
+    private static final short BIP32_OFFSET_INDEX= (short)(2*BIP32_KEY_SIZE+1);
+    private static final short BIP32_OFFSET_CHILD_KEY= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE); 
+    private static final short BIP32_OFFSET_CHILD_CHAINCODE= (short)(BIP32_OFFSET_CHILD_KEY+BIP32_KEY_SIZE);
+    private static final short BIP32_OFFSET_PUB= (short)(BIP32_OFFSET_CHILD_CHAINCODE+BIP32_KEY_SIZE);
+    private static final short BIP32_OFFSET_PUBX= (short)(BIP32_OFFSET_PUB+1);
+    private static final short BIP32_OFFSET_PUBY= (short)(BIP32_OFFSET_PUBX+BIP32_KEY_SIZE);
+    private static final short BIP32_OFFSET_END= (short)(BIP32_OFFSET_PUBY+BIP32_KEY_SIZE);
+    
+    //   bip32 keys
+    private ECPrivateKey bip32_extendedkey; // object storing last extended key used
+
 
     /*********************************************
      *        Other data instances               *
@@ -577,6 +606,9 @@ public class SeedKeeper extends javacard.framework.Applet {
         // logger
         logger= new Logger(LOGGER_NBRECORDS); 
         
+        // BIP32
+        bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+
         // card label
         card_label= new byte[MAX_CARD_LABEL_SIZE];
         
@@ -776,6 +808,9 @@ public class SeedKeeper extends javacard.framework.Applet {
             case INS_DERIVE_MASTER_PASSWORD:
                 sizeout= deriveMasterPassword(apdu, buffer);
                 break;
+            case INS_BIP32_GET_EXTENDED_KEY:
+                sizeout= getBIP32ExtendedKey(apdu, buffer);
+                break;
             case INS_IMPORT_SECRET:
                 sizeout= importSecret(apdu, buffer);
                 break;
@@ -973,6 +1008,9 @@ public class SeedKeeper extends javacard.framework.Applet {
             bytesLeft-=(short)2;
         }
         
+        // bip32
+        Secp256k1.setCommonCurveParameters(bip32_extendedkey);
+
         om_nextid= (short)0;
         setupDone = true;
         return (short)0;//nothing to return
@@ -1057,10 +1095,11 @@ public class SeedKeeper extends javacard.framework.Applet {
         byte seed_size= buffer[ISO7816.OFFSET_P1];
         if ((seed_size < MIN_SEED_SIZE) || (seed_size > MAX_SEED_SIZE) )
             ISOException.throwIt(SW_INCORRECT_P1);
-    
-        byte export_rights = buffer[ISO7816.OFFSET_P2];
-        if ((export_rights < SECRET_EXPORT_ALLOWED) || (export_rights > SECRET_EXPORT_FORBIDDEN) )
-            ISOException.throwIt(SW_INCORRECT_P2);
+        
+        // todo: we don't check export/usage rights, bits outside mask 0x33 are just ignored
+        byte export_rights = (byte)(buffer[ISO7816.OFFSET_P2]&0x33);   
+        // if ((export_rights < SECRET_EXPORT_FORBIDDEN) || (export_rights > SECRET_EXPORT_SECUREONLY) )
+        //     ISOException.throwIt(SW_INCORRECT_P2);
     
         short buffer_offset = ISO7816.OFFSET_CDATA;
         short recv_offset = (short)0;
@@ -1135,9 +1174,10 @@ public class SeedKeeper extends javacard.framework.Applet {
         // log operation
         logger.createLog(INS_GENERATE_2FA_SECRET, (short)-1, (short)-1, (short)0x0000);
         
-        byte export_rights = buffer[ISO7816.OFFSET_P2];
-        if ((export_rights < SECRET_EXPORT_ALLOWED) || (export_rights > SECRET_EXPORT_FORBIDDEN) )
-            ISOException.throwIt(SW_INCORRECT_P2);
+        // we don't check export/usage rights, bits outside mask 0x33 are just ignored
+        byte export_rights = (byte)(buffer[ISO7816.OFFSET_P2]&0x33);
+        // if ((export_rights < SECRET_EXPORT_FORBIDDEN) || (export_rights > SECRET_EXPORT_SECUREONLY) )
+        //     ISOException.throwIt(SW_INCORRECT_P2);
     
         short buffer_offset = ISO7816.OFFSET_CDATA;
         short recv_offset = (short)0;
@@ -1221,9 +1261,10 @@ public class SeedKeeper extends javacard.framework.Applet {
         if ((secret_size < MIN_RANDOM_SIZE) || (secret_size > MAX_RANDOM_SIZE) )
             ISOException.throwIt(SW_INCORRECT_P1);
     
-        byte export_rights = buffer[ISO7816.OFFSET_P2];
-        if ((export_rights < SECRET_EXPORT_ALLOWED) || (export_rights > SECRET_EXPORT_FORBIDDEN) )
-            ISOException.throwIt(SW_INCORRECT_P2);
+        // we don't check export/usage rights, bits outside mask 0x33 are just ignored
+        byte export_rights = (byte)(buffer[ISO7816.OFFSET_P2]&0x33);
+        // if ((export_rights < SECRET_EXPORT_FORBIDDEN) || (export_rights > SECRET_EXPORT_SECUREONLY))
+        //     ISOException.throwIt(SW_INCORRECT_P2);
         
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytesLeft<4)
@@ -1278,7 +1319,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN, (byte)0);
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, (byte)0);
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_COUNTER, (byte)0);
-        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU1, (byte)secret_subtype);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU1, secret_subtype);
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU2, (byte)0);
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE, (byte) (label_size & 0x7f));
         om_secrets.setObjectData(obj_base, SECRET_OFFSET_LABEL, buffer, buffer_offset, label_size);
@@ -1489,6 +1530,194 @@ public class SeedKeeper extends javacard.framework.Applet {
         return (short)(2+hmac_size+2+sign_size);
     }
 
+    /**
+     * The function computes the Bip32 extended key derived from the master key and returns either the 
+     * 32-bytes x-coordinate of the public key, or the 32-bytes private key, signed by the authentikey.
+     * 
+     * The Path for the derivation is provided in the apdu data.
+     * 
+     * ins: 0x6D
+     * p1: depth of the extended key (master is depth 0, m/i is depht 1). Max depth is 10
+     * p2: option_flags (masks):
+     *      0x80: (deprecated: reset the bip32 cache memory)
+     *      0x40: (deprecated: optimize non-hardened child derivation)
+     *      0x20: (deprecated: flag whether to store key as object)
+     *      0x01: if set, use secure export (currently not supported!), otherwise use plain export
+     *      0x02: if set, return privkey bytes, else public key
+     *      0x04: (RFU) if set, add final BIP85 HMAC derivation (currently not supported!)
+     * 
+     * data: [path_bytes(4*depth) | sid(2b) | sid_pubkey(2b)] where:
+     *      path_bytes is the index path from master to extended key (m/i/j/k/...). 4 bytes per index
+     *      sid is the id of the Masterseed to use
+     *      sid_pubkey (RFU): id of a pubkey for secure (encrypted) export (currently not supported).
+     * 
+     * returns: [chaincode(32b) | coordx_size(2b) | coordx | sig_size(2b) | sig | sig_size(2b) | sig2] if (option_flags & 0x01 == 0x00)
+     *          [chaincode(32b) | privkey_bytes(2b) | privkey | sig_size(2b) | sig | sig_size(2b) | sig2] if (option_flags & 0x01 == 0x00)
+     * 
+     * */
+    private short getBIP32ExtendedKey(APDU apdu, byte[] buffer){
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // input 
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        
+        byte bip32_depth = buffer[ISO7816.OFFSET_P1];
+        if ((bip32_depth < 0) || (bip32_depth > BIP32_MAX_DEPTH) )
+            ISOException.throwIt(SW_INCORRECT_P1);
+        if (bytesLeft < (short)(4*bip32_depth+2)) // path + sid
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        
+        // P2 option flags
+        byte opts = buffer[ISO7816.OFFSET_P2]; 
+        // if ((opts & 0x01)==0x01)
+        //     ISOException.throwIt(SW_UNSUPPORTED_FEATURE); // secure export is not supported currently
+
+        // start logging
+        logger.createLog(INS_BIP32_GET_EXTENDED_KEY, (short)-1, (short)-1, (short)0x0000);
+
+        // get masterseed sid
+        short path_offset = ISO7816.OFFSET_CDATA;
+        short sid = Util.getShort(buffer, (short)(path_offset + 4*bip32_depth));
+        short obj_base = om_secrets.getBaseAddress(OM_TYPE, sid);
+        if (obj_base==(short)0xFFFF){
+            logger.updateLog(INS_BIP32_GET_EXTENDED_KEY, sid, (short)-1, SW_OBJECT_NOT_FOUND);
+            ISOException.throwIt(SW_OBJECT_NOT_FOUND);
+        }
+        // check type, only types containing a masterseed are supported
+        byte secret_type = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_TYPE);
+        if ((secret_type != SECRET_TYPE_MASTER_SEED) && (secret_type != SECRET_TYPE_BIP39_MNEMONIC_V2)){
+            logger.updateLog(INS_BIP32_GET_EXTENDED_KEY, sid, (short)-1, SW_WRONG_SECRET_TYPE);
+            ISOException.throwIt(SW_WRONG_SECRET_TYPE);
+        }
+        // check usage policy, currently only support usage with plaintext export
+        byte export_policy = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL);
+        if ((export_policy & SECRET_USAGE_MASK) != SECRET_USAGE_ALLOWED){
+            logger.updateLog(INS_BIP32_GET_EXTENDED_KEY, sid, (short)-1, SW_USAGE_NOT_ALLOWED);
+            ISOException.throwIt(SW_USAGE_NOT_ALLOWED);
+        }
+        // increment usage counter
+        byte counter = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_COUNTER);
+        counter++;
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_COUNTER, counter);
+
+        // copy encrypted masterseed to recvbuffer
+        short obj_size= om_secrets.getSizeFromAddress(obj_base);
+        byte label_size = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE);
+        short secret_offset = (short) (SECRET_HEADER_SIZE + label_size);
+        om_secrets.getObjectData(obj_base, secret_offset, recvBuffer, (short)0, (short)(obj_size-secret_offset));
+        // decrypt masterseed
+        om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
+        short dec_size= om_aes128_ecb.doFinal(recvBuffer, (short)0, (short)(obj_size-secret_offset), recvBuffer, (short)0);
+        byte masterseed_size= recvBuffer[0]; 
+        // recvBuffer map: [masterseed_size(1b) | masterseed]
+
+        // derive master key from masterseed
+        HmacSha512.computeHmacSha512(BITCOIN_SEED, (short)0, (short)BITCOIN_SEED.length, recvBuffer, (short)1, (short)masterseed_size, recvBuffer, BIP32_OFFSET_PARENT_KEY);
+        // recvBuffer map: [ garbage(33b) | bip32_masterkey(32b) | bip32_masterchaincode(32b)]
+        Util.arrayCopyNonAtomic(recvBuffer, (short)65, recvBuffer, (short)0, BIP32_KEY_SIZE);
+        recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]= 0x00; // separator, also facilitate HMAC derivation
+        // recvBuffer map: [ bip32_masterchaincode(32b) | 0x00(1b) | bip32_masterkey(32b) | bip32_masterchaincode(32b)]
+        
+        // The method uses a temporary buffer recvBuffer to store the parent and extended key object data:
+        // recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | buffer(index)(32b) | current_extended_key(32b) | current_chain_code(32b) | parent_pubkey(65b)]
+        // parent_pubkey(65b)= [compression_byte(1b) | coord_x (32b) | coord_y(32b)]
+        
+        
+        // path indexes are stored in buffer starting at ISO7816.OFFSET_CDATA offset
+        // iterate on indexes provided 
+        for (byte i=0; i<bip32_depth; i++){ // todo: start at 0??
+             path_offset = (short)(ISO7816.OFFSET_CDATA+4*i);
+
+            // normal or hardened child?
+            byte msb= buffer[path_offset];
+            if ((msb & 0x80)!=0x80){ // normal child
+
+                // todo: for BIP85, only hardened child is allowed
+                // todo: for export policy SECRET_EXPORT_SECUREONLY, only allow hardened privkey, otherwise it might leak parents privkeys as per BIP32
+
+                // compute coord x from privkey 
+                bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
+                keyAgreement.init(bip32_extendedkey);
+                
+                // keyAgreement.generateSecret() recovers X and Y coordinates
+                keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, BIP32_OFFSET_PUB); //pubkey in uncompressed form
+                boolean parity= ((recvBuffer[(short)(BIP32_OFFSET_PUBY+31)]&0x01)==0);
+                byte compbyte= (parity)?(byte)0x02:(byte)0x03; 
+                
+                // compute HMAC of compressed pubkey + index
+                recvBuffer[BIP32_OFFSET_PUB]= compbyte;
+                Util.arrayCopyNonAtomic(buffer, path_offset, recvBuffer, BIP32_OFFSET_PUBY, (short)4);
+                HmacSha512.computeHmacSha512(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PUB, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_CHILD_KEY);
+            }
+            else { // hardened child
+                recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]= 0x00;
+                Util.arrayCopyNonAtomic(buffer, path_offset, recvBuffer, BIP32_OFFSET_INDEX, (short)4);
+                HmacSha512.computeHmacSha512(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PARENT_SEPARATOR, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_CHILD_KEY);
+            }
+
+            // addition with parent_key...
+            // First check that parse256(IL) < SECP256K1_R
+            if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
+                logger.updateLog(INS_BIP32_GET_EXTENDED_KEY, sid, (short)-1, SW_BIP32_DERIVATION_ERROR);
+                ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
+            }
+            // add parent_key (mod SECP256K1_R)
+            if(Biginteger.add_carry(recvBuffer, BIP32_OFFSET_CHILD_KEY, recvBuffer, (short) (BIP32_KEY_SIZE+1), BIP32_KEY_SIZE)){
+                // in case of final carry, we must substract SECP256K1_R
+                // we have IL<SECP256K1_R and parent_key<SECP256K1_R, so IL+parent_key<2*SECP256K1_R
+                Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE); 
+            }else{
+                // in the unlikely case where SECP256K1_R<=IL+parent_key<2^256
+                if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
+                    Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);
+                }
+                // check that value is not 0
+                if(Biginteger.equalZero(recvBuffer, BIP32_OFFSET_CHILD_KEY, BIP32_KEY_SIZE)){
+                    logger.updateLog(INS_BIP32_GET_EXTENDED_KEY, sid, (short)-1, SW_BIP32_DERIVATION_ERROR);
+                    ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
+                }
+            }
+
+            // at this point, recvBuffer contains the extended key at depth i
+            recvBuffer[BIP32_OFFSET_PUB]=0x04;
+            // copy privkey & chain code in parent's offset
+            Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_CHILD_CHAINCODE, recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE); // chaincode
+            Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_CHILD_KEY, recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE); // extended_key
+            recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]=0x00;            
+        } // end for
+
+        // todo: get the pubkey or privkey depending on opts flags     
+        // instantiate elliptic curve with last extended key
+        bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
+        
+        // save chaincode to buffer then clear recvBuffer
+        Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE); 
+        Util.arrayFillNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_OFFSET_END, (byte)0);
+        
+        // compute the corresponding partial public key...
+        keyAgreement.init(bip32_extendedkey);
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)33); //pubkey in uncompressed form
+        Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
+        
+        // self-sign coordx
+        sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2+BIP32_KEY_SIZE), buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+2), sign_size);
+        
+        // coordx signed by authentikey
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size2= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+4), buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+6));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+4), sign_size2);
+        
+        // return x-coordinate of public key+signatures
+        // the client can recover full public-key by guessing the compression value () and verifying the signature... 
+        // buffer=[chaincode(32) | coordx_size(2) | coordx | sign_size(2) | self-sign | sign_size(2) | auth_sign]
+        return (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+sign_size2+6);
+        
+    }// end of getBip32ExtendedKey()    
+
     /** 
      * This function imports a secret in plaintext/encrypted from host.
      * 
@@ -1534,10 +1763,12 @@ public class SeedKeeper extends javacard.framework.Applet {
                 byte type= buffer[buffer_offset];
                 buffer_offset++;
                 buffer_offset++; // skip 'origin'
-                byte export_rights= buffer[buffer_offset];
+
+                // we don't check export/usage rights, bits outside mask 0x33 are just ignored
+                byte export_rights= (byte)(buffer[buffer_offset]&0x33);
                 buffer_offset++;
-                if ((export_rights < SECRET_EXPORT_ALLOWED) || (export_rights > SECRET_EXPORT_FORBIDDEN) )
-                    ISOException.throwIt(SW_INVALID_PARAMETER);
+                // if ((export_rights < SECRET_EXPORT_FORBIDDEN) || (export_rights > SECRET_EXPORT_SECUREONLY))
+                //     ISOException.throwIt(SW_INVALID_PARAMETER);
                 buffer_offset+=7; // skip export_nb_plain, export_nb_secure, export_counter_pubkey and fingerprint
                 byte RFU1= buffer[buffer_offset];
                 buffer_offset++;
@@ -1803,13 +2034,14 @@ public class SeedKeeper extends javacard.framework.Applet {
      *             [data_blob_size(2b) | data_blob | hmac_size(2b) | hmac(20b)] if secure export 
      */
     private short exportSecret(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
+        // check that PIN has been entered previously
         if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         lock_transport_mode= buffer[ISO7816.OFFSET_P1];
         if (lock_transport_mode != SECRET_EXPORT_ALLOWED && lock_transport_mode != SECRET_EXPORT_SECUREONLY)
             ISOException.throwIt(SW_INVALID_PARAMETER);
+        // TODO p1=0x03: backward compatible export BIP39v2 seeds to satochip by converting them to simple Masterseed
         
         short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         short buffer_offset = ISO7816.OFFSET_CDATA;
