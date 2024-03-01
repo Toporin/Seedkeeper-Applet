@@ -1688,18 +1688,27 @@ public class SeedKeeper extends javacard.framework.Applet {
             recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]=0x00;            
         } // end for
 
-        // todo: get the pubkey or privkey depending on opts flags     
+
+        // at this point, recvBuffer contains a copy of the last extended private key
+        // save chaincode to buffer
+        Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE); 
         // instantiate elliptic curve with last extended key
         bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
-        
-        // save chaincode to buffer then clear recvBuffer
-        Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE); 
+        // clear recvBuffer
         Util.arrayFillNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_OFFSET_END, (byte)0);
-        
-        // compute the corresponding partial public key...
-        keyAgreement.init(bip32_extendedkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)33); //pubkey in uncompressed form
-        Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
+       
+        // copy privkey or pubkey depending on option flag
+        if ((opts & 0x02)==0x02){
+            // export privkey directly
+            bip32_extendedkey.getS(buffer, (short)34);
+            Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
+        } else {
+            // export pubkey
+            // compute the corresponding partial public key
+            keyAgreement.init(bip32_extendedkey);
+            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)33); //pubkey in uncompressed form including 0x04 byte
+            Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
+        }
         
         // self-sign coordx
         sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
