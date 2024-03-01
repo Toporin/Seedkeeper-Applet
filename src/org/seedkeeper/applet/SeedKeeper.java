@@ -467,6 +467,9 @@ public class SeedKeeper extends javacard.framework.Applet {
     //   bip32 keys
     private ECPrivateKey bip32_extendedkey; // object storing last extended key used
 
+    // bip85 
+    private static final byte[] BIP85_SALT = {'b','i','p','-','e','n','t','r','o','p','y','-','f','r','o','m','-','k'};
+    
 
     /*********************************************
      *        Other data instances               *
@@ -1551,8 +1554,9 @@ public class SeedKeeper extends javacard.framework.Applet {
      *      sid is the id of the Masterseed to use
      *      sid_pubkey (RFU): id of a pubkey for secure (encrypted) export (currently not supported).
      * 
-     * returns: [chaincode(32b) | coordx_size(2b) | coordx | sig_size(2b) | sig | sig_size(2b) | sig2] if (option_flags & 0x01 == 0x00)
-     *          [chaincode(32b) | privkey_bytes(2b) | privkey | sig_size(2b) | sig | sig_size(2b) | sig2] if (option_flags & 0x01 == 0x00)
+     * returns: [chaincode(32b) | coordx_size(2b) | coordx | sig_size(2b) | sig | sig_size(2b) | sig2] if (option_flags & 0x02 == 0x00) BIP32 pubkey
+     *          [chaincode(32b) | privkey_bytes(2b) | privkey | sig_size(2b) | sig | sig_size(2b) | sig2] if (option_flags & 0x02 == 0x02) BIP32 privkey
+     *          [entropy_size(2b) | entropy_bytes(64) | sig_size(2b) | sig | sig_size(2b) | sig2] if (option_flags & 0x04 == 0x04) BIP85
      * 
      * */
     private short getBIP32ExtendedKey(APDU apdu, byte[] buffer){
@@ -1688,26 +1692,35 @@ public class SeedKeeper extends javacard.framework.Applet {
             recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]=0x00;            
         } // end for
 
-
-        // at this point, recvBuffer contains a copy of the last extended private key
-        // save chaincode to buffer
-        Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE); 
+        // at this point, recvBuffer contains a copy of the chaincode & last extended private key
         // instantiate elliptic curve with last extended key
         bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
-        // clear recvBuffer
-        Util.arrayFillNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_OFFSET_END, (byte)0);
-       
-        // copy privkey or pubkey depending on option flag
-        if ((opts & 0x02)==0x02){
-            // export privkey directly
-            bip32_extendedkey.getS(buffer, (short)34);
-            Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
+        
+        // BIP85 option flag
+        if ((opts & 0x04)==0x04){
+            // compute final HmacSha512
+            HmacSha512.computeHmacSha512(BIP85_SALT, (short)0, (short)BIP85_SALT.length, recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE, buffer, (short)2);
+            Util.setShort(buffer, (short)0, (short)64);
+            // clear recvBuffer
+            Util.arrayFillNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_OFFSET_END, (byte)0);
         } else {
-            // export pubkey
-            // compute the corresponding partial public key
-            keyAgreement.init(bip32_extendedkey);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)33); //pubkey in uncompressed form including 0x04 byte
-            Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
+            // BIP32 pubkey or privkey
+            // save chaincode to buffer
+            Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE); 
+            // clear recvBuffer
+            Util.arrayFillNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_OFFSET_END, (byte)0);
+            // copy privkey or pubkey depending on option flag
+            if ((opts & 0x02)==0x02){
+                // export privkey directly
+                bip32_extendedkey.getS(buffer, (short)34);
+                Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
+            } else {
+                // export pubkey
+                // compute the corresponding partial public key
+                keyAgreement.init(bip32_extendedkey);
+                keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)33); //pubkey in uncompressed form including 0x04 byte
+                Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
+            }
         }
         
         // self-sign coordx
@@ -2145,7 +2158,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 // update export_nb in object
                 if (lock_transport_mode== SECRET_EXPORT_ALLOWED){
                     // check export rights
-                    if (recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]!=SECRET_EXPORT_ALLOWED){
+                    if ((recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]&SECRET_EXPORT_MASK)!=SECRET_EXPORT_ALLOWED){
                         resetLock();
                         logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_EXPORT_NOT_ALLOWED);
                         ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
