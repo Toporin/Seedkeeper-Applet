@@ -333,9 +333,9 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_TYPE_MASTER_PASSWORD= (byte) 0x91; // can be derived to generate many passwords
     private final static byte SECRET_TYPE_CERTIFICATE= (byte) 0xA0;
     private final static byte SECRET_TYPE_2FA= (byte) 0xB0; // to deprecate and use SECRET_TYPE_KEY instead
-    private final static byte SECRET_TYPE_BITCOIN_DESCRIPTOR= (byte) 0xC0;
-    private final static byte SECRET_TYPE_DATA= (byte) 0xD0;
-
+    private final static byte SECRET_TYPE_DATA= (byte) 0xC0;
+    //private final static byte SECRET_TYPE_BITCOIN_DESCRIPTOR= (byte) 0xD0; // use data subtype
+    
     // subtype (optionnal, default = 0)
     private final static byte SECRET_SUBTYPE_DEFAULT = (byte) 0x00;
 
@@ -348,11 +348,11 @@ public class SeedKeeper extends javacard.framework.Applet {
     
     // use controls: use a secret to perform specific operations
     // For example a masterseed can be derived using BIP32, with extended keys exported
-    private final static byte SECRET_USAGE_MASK = (byte) 0x30; // mask for the export controls
-    private final static byte SECRET_USAGE_FORBIDDEN = (byte) 0x00; // never allowed
-    private final static byte SECRET_USAGE_ALLOWED = (byte) 0x10; // always allowed
-    private final static byte SECRET_USAGE_SECUREONLY = (byte) 0x20; // allowed only using encrypted export
-    private final static byte SECRET_USAGE_AUTHENTICATED = (byte) 0x30; // RFU: only encrypted with certified authentikey
+    // private final static byte SECRET_USAGE_MASK = (byte) 0x30; // mask for the export controls
+    // private final static byte SECRET_USAGE_FORBIDDEN = (byte) 0x00; // never allowed
+    // private final static byte SECRET_USAGE_ALLOWED = (byte) 0x10; // always allowed
+    // private final static byte SECRET_USAGE_SECUREONLY = (byte) 0x20; // allowed only using encrypted export
+    // private final static byte SECRET_USAGE_AUTHENTICATED = (byte) 0x30; // RFU: only encrypted with certified authentikey
 
     // origin
     private final static byte SECRET_ORIGIN_IMPORT_PLAIN= (byte) 0x01; 
@@ -1099,8 +1099,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if ((seed_size < MIN_SEED_SIZE) || (seed_size > MAX_SEED_SIZE) )
             ISOException.throwIt(SW_INCORRECT_P1);
         
-        // todo: we don't check export/usage rights, bits outside mask 0x33 are just ignored
-        byte export_rights = (byte)(buffer[ISO7816.OFFSET_P2]&0x33);   
+        // we don't check export/usage rights, bits outside mask are just ignored
+        byte export_rights = (byte)(buffer[ISO7816.OFFSET_P2]&SECRET_EXPORT_MASK);   
         // if ((export_rights < SECRET_EXPORT_FORBIDDEN) || (export_rights > SECRET_EXPORT_SECUREONLY) )
         //     ISOException.throwIt(SW_INCORRECT_P2);
     
@@ -1177,8 +1177,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         // log operation
         logger.createLog(INS_GENERATE_2FA_SECRET, (short)-1, (short)-1, (short)0x0000);
         
-        // we don't check export/usage rights, bits outside mask 0x33 are just ignored
-        byte export_rights = (byte)(buffer[ISO7816.OFFSET_P2]&0x33);
+        // we don't check export/usage rights, bits outside mask are just ignored
+        byte export_rights = (byte)(buffer[ISO7816.OFFSET_P2]&SECRET_EXPORT_MASK);
         // if ((export_rights < SECRET_EXPORT_FORBIDDEN) || (export_rights > SECRET_EXPORT_SECUREONLY) )
         //     ISOException.throwIt(SW_INCORRECT_P2);
     
@@ -1264,8 +1264,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if ((secret_size < MIN_RANDOM_SIZE) || (secret_size > MAX_RANDOM_SIZE) )
             ISOException.throwIt(SW_INCORRECT_P1);
     
-        // we don't check export/usage rights, bits outside mask 0x33 are just ignored
-        byte export_rights = (byte)(buffer[ISO7816.OFFSET_P2]&0x33);
+        // we don't check export/usage rights, bits outside mask are just ignored
+        byte export_rights = (byte)(buffer[ISO7816.OFFSET_P2]&SECRET_EXPORT_MASK);
         // if ((export_rights < SECRET_EXPORT_FORBIDDEN) || (export_rights > SECRET_EXPORT_SECUREONLY))
         //     ISOException.throwIt(SW_INCORRECT_P2);
         
@@ -1492,6 +1492,12 @@ public class SeedKeeper extends javacard.framework.Applet {
             logger.updateLog(INS_DERIVE_MASTER_PASSWORD, lock_id, lock_id_pubkey, SW_WRONG_SECRET_TYPE);
             ISOException.throwIt(SW_WRONG_SECRET_TYPE);
         }
+        // check export policy, currently we only support plaintext export
+        byte export_policy = om_secrets.getObjectByte(base, SECRET_OFFSET_EXPORT_CONTROL);
+        if ((export_policy & SECRET_EXPORT_MASK) != SECRET_EXPORT_ALLOWED){
+            logger.updateLog(INS_BIP32_GET_EXTENDED_KEY, lock_id, lock_id_pubkey, SW_EXPORT_NOT_ALLOWED);
+            ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
+        }
         // update derivation counter
         byte counter = om_secrets.getObjectByte(base, SECRET_OFFSET_EXPORT_COUNTER);   
         counter++; // incremented each time we derive a new key
@@ -1595,11 +1601,11 @@ public class SeedKeeper extends javacard.framework.Applet {
             logger.updateLog(INS_BIP32_GET_EXTENDED_KEY, sid, (short)-1, SW_WRONG_SECRET_TYPE);
             ISOException.throwIt(SW_WRONG_SECRET_TYPE);
         }
-        // check usage policy, currently only support usage with plaintext export
+        // check export policy, currently we only support plaintext export
         byte export_policy = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL);
-        if ((export_policy & SECRET_USAGE_MASK) != SECRET_USAGE_ALLOWED){
-            logger.updateLog(INS_BIP32_GET_EXTENDED_KEY, sid, (short)-1, SW_USAGE_NOT_ALLOWED);
-            ISOException.throwIt(SW_USAGE_NOT_ALLOWED);
+        if ((export_policy & SECRET_EXPORT_MASK) != SECRET_EXPORT_ALLOWED){
+            logger.updateLog(INS_BIP32_GET_EXTENDED_KEY, sid, (short)-1, SW_EXPORT_NOT_ALLOWED);
+            ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
         }
         // increment usage counter
         byte counter = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_COUNTER);
@@ -1639,8 +1645,7 @@ public class SeedKeeper extends javacard.framework.Applet {
             if ((msb & 0x80)!=0x80){ // normal child
 
                 // todo: for BIP85, only hardened child is allowed
-                // todo: for export policy SECRET_EXPORT_SECUREONLY, only allow hardened privkey, otherwise it might leak parents privkeys as per BIP32
-
+                
                 // compute coord x from privkey 
                 bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
                 keyAgreement.init(bip32_extendedkey);
@@ -1759,6 +1764,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
+
         lock_transport_mode= buffer[ISO7816.OFFSET_P1];
         if (lock_transport_mode != SECRET_EXPORT_ALLOWED && lock_transport_mode != SECRET_EXPORT_SECUREONLY)
             ISOException.throwIt(SW_INVALID_PARAMETER);
@@ -1786,8 +1792,8 @@ public class SeedKeeper extends javacard.framework.Applet {
                 buffer_offset++;
                 buffer_offset++; // skip 'origin'
 
-                // we don't check export/usage rights, bits outside mask 0x33 are just ignored
-                byte export_rights= (byte)(buffer[buffer_offset]&0x33);
+                // we don't check export rights, bits outside mask are just ignored
+                byte export_rights= (byte)(buffer[buffer_offset]&SECRET_EXPORT_MASK);
                 buffer_offset++;
                 // if ((export_rights < SECRET_EXPORT_FORBIDDEN) || (export_rights > SECRET_EXPORT_SECUREONLY))
                 //     ISOException.throwIt(SW_INVALID_PARAMETER);
@@ -2155,9 +2161,8 @@ public class SeedKeeper extends javacard.framework.Applet {
                 }
                 short obj_size= om_secrets.getSizeFromAddress(base);
                 om_secrets.getObjectData(base, (short)0, recvBuffer, (short)0, obj_size);
-                // update export_nb in object
+                // check export rights & update export_nb in object
                 if (lock_transport_mode== SECRET_EXPORT_ALLOWED){
-                    // check export rights
                     if ((recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]&SECRET_EXPORT_MASK)!=SECRET_EXPORT_ALLOWED){
                         resetLock();
                         logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_EXPORT_NOT_ALLOWED);
@@ -2167,6 +2172,12 @@ public class SeedKeeper extends javacard.framework.Applet {
                     om_secrets.setObjectByte(base, SECRET_OFFSET_EXPORT_NBPLAIN, recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]);
                 }
                 else{
+                    if ((recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]&SECRET_EXPORT_MASK)!=SECRET_EXPORT_ALLOWED &&
+                        (recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]&SECRET_EXPORT_MASK)!=SECRET_EXPORT_SECUREONLY){
+                        resetLock();
+                        logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_EXPORT_NOT_ALLOWED);
+                        ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
+                    }
                     recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]+=1; 
                     om_secrets.setObjectByte(base, SECRET_OFFSET_EXPORT_NBSECURE, recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]);   
                 }
