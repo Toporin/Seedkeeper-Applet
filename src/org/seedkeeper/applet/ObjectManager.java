@@ -46,6 +46,7 @@ public class ObjectManager {
 
     /** There have been memory problems on the card */
     public final static short SW_NO_MEMORY_LEFT = (short) 0x9C01;
+    public final static short SW_OBJECT_NOT_FOUND= (short) 0x9C08;
 
     /**
      * Size of an Object Record filled by getFirstRecord() or getNextRecord():
@@ -105,7 +106,7 @@ public class ObjectManager {
      * @return The memory base address for the object. It can be used in
      *         successive calls to xxxFromAddress() methods.
      */
-    public short createObject(short type, short id, short size) {
+    public short createObject(short type, short id, short size, boolean secure) {
         /* Allocate memory for new object */
         short base = mem.alloc((short) (size + OBJ_HEADER_SIZE));
         if (base == MemoryManager.NULL_OFFSET)
@@ -118,6 +119,11 @@ public class ObjectManager {
         //mem.setBytes(base, OBJ_H_ACL, acl_buf, acl_offset, OBJ_ACL_SIZE);
         obj_list_head = base;
 
+        // reset object memory 
+        if (secure){
+            Util.arrayFillNonAtomic(mem.getBuffer(), (short) (base + OBJ_HEADER_SIZE), mem.getShort(base, OBJ_H_SIZE), (byte) 0x00);
+        }
+        
         /* Add to the map */
         // map.addEntry(type, id, base);
 
@@ -131,10 +137,10 @@ public class ObjectManager {
         if (obj_size == (short) 0)
             ISOException.throwIt(SW_NO_MEMORY_LEFT);
         /*
-         * The object's real size must take into account that * extra bytes are
+         * The object's real size must take into account that extra bytes are
          * needed for the header
          */
-        return createObject(type, id, (short) (obj_size - OBJ_HEADER_SIZE));
+        return createObject(type, id, (short) (obj_size - OBJ_HEADER_SIZE), false);
     }
 
     /**
@@ -151,7 +157,7 @@ public class ObjectManager {
     public boolean clampObject(short type, short id, short new_size) {
         short base = getEntry(type, id);
         if (base == MemoryManager.NULL_OFFSET)
-            ISOException.throwIt((short) 0x9C07); //TODO: assign code
+            ISOException.throwIt(SW_OBJECT_NOT_FOUND);
         // Delegate every check to the Memory Manager
         if (mem.realloc(base, (short) (new_size + OBJ_HEADER_SIZE))) {
             mem.setShort(base, OBJ_H_SIZE, new_size);
@@ -159,6 +165,35 @@ public class ObjectManager {
         }
         return false;
     }
+
+    /**
+     * Clamps an object freeing the unused memory. 
+     * This method is faster than clampObject(short type, short id, short new_size) 
+     * since base address is already provided and do not need to be searched.
+     * 
+     * @param base
+     *            The base address as returned by getBaseAddress().
+     *            This is located after the object metadata header (OBJ_HEADER_SIZE)
+     * @param new_size
+     *            The new object size (must be less than current size)
+     * @return True if clamp was possible, false otherwise
+     */
+    public boolean clampObject(short base, short new_size) {
+        if (base == MemoryManager.NULL_OFFSET)
+            ISOException.throwIt(SW_OBJECT_NOT_FOUND);
+        // compute base pointer (start of oject header) from base address (start of object data)
+        base-= OBJ_HEADER_SIZE;
+        // Delegate every check to the Memory Manager
+        if (mem.realloc(base, (short) (new_size + OBJ_HEADER_SIZE))) {
+            mem.setShort(base, OBJ_H_SIZE, new_size);
+            return true;
+        }
+        return false;
+    }
+
+
+
+
 
 //    /** Write data at the specified location in an object */
 //    public void setObjectData(short type, short id, short dst_offset, byte[] src_data, short src_offset, short len) {
@@ -223,9 +258,9 @@ public class ObjectManager {
                 obj_list_head = mem.getShort(base, OBJ_H_NEXT);
             }
             // Zero memory if required
-            if (secure)
-                Util.arrayFillNonAtomic(mem.getBuffer(), (short) (base + OBJ_HEADER_SIZE), mem.getShort(base,
-                        OBJ_H_SIZE), (byte) 0x00);
+            if (secure){
+                Util.arrayFillNonAtomic(mem.getBuffer(), (short) (base + OBJ_HEADER_SIZE), mem.getShort(base,OBJ_H_SIZE), (byte) 0x00);
+            }
 
             // Free memory
             mem.free(base);
