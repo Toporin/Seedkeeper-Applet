@@ -1025,7 +1025,10 @@ public class SeedKeeper extends javacard.framework.Applet {
         return (short)0;//nothing to return
     }
 
-    /********** UTILITY FUNCTIONS **********/
+    /****************************************
+     *           Utility functions          *
+     ****************************************/
+    
 
     /** Checks if PIN policies are satisfied for a PIN code */
     private boolean CheckPINPolicy(byte[] pin_buffer, short pin_offset, byte pin_size) {
@@ -1033,29 +1036,9 @@ public class SeedKeeper extends javacard.framework.Applet {
             return false;
         return true;
     }
-
-    // deprecated
-    // private void resetLock(){
-    //     //reset data
-    //     Util.arrayFillNonAtomic(recvBuffer, (short)0, lock_recv_offset, (byte)0x00);
-    //     // Release lock
-    //     lock_ins= 0x00;
-    //     lock_lastop= 0x00;
-    //     lock_recv_offset= 0x00;
-    //     lock_transport_mode= 0x00;
-    //     lock_enabled = false;
-    // }
-
-    // deprecated
-    // private void resetLockException() {
-    //     //reset data
-    //     resetLock();
-    //     // throws exception
-    //     ISOException.throwIt(SW_LOCK_ERROR);
-    // }
     
     private void resetLockThenThrow(short ErrorCode, boolean destroy_object){
-        //destroy object the error happened during secret object creation
+        //destroy object if the error happened during secret object creation
         if (destroy_object){
             om_secrets.destroyObject(OM_TYPE, lock_id, true);
         }
@@ -1101,7 +1084,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     }
     
     /****************************************
-     * APDU handlers *
+     *              APDU handlers           *
      ****************************************/   
     
     /** 
@@ -1774,11 +1757,27 @@ public class SeedKeeper extends javacard.framework.Applet {
     /** 
      * This function imports a secret in plaintext/encrypted from host.
      * 
+     * For SeedKeeper v0.2 and higher: 
+     * During the init phase, secret_size must be provided so that exact amount of memory can be allocated.
+     * This secret_size is the size that the **encrypted** secret will occupy in memory (using AES ECB with **padding**).
+     * For secure import, secret is already encrypted, thus secret_size is simply the size of the encrypted secret (in bytes)
+     * For plain import, secret will be encrypted in memory, so a padding of (AES_BLOCKSIZE - plain_secret_size%AES_BLOCKSIZE) must be added.
+     * 
+     * @param header 
+     *          The header includes SECRET_HEADER_SIZE bytes of meta data plus the secret label
+     * @param id_pubkey
+     *          For secure import only, the short value of id of the pubkey used for import.
+     *          Secret is encrypted using a symmetric key derived from the card authentikey and this pubkey via ECDH
+     * @param IV
+     *          For secure import only, the IV nonce used to encrypt secret (using AES in CBC mode)
+     * @param secret_size
+     *          Required since SeedKeeper v0.2
+     * 
      * ins: 0xA1
      * p1: 0x01 (plain import) or 0x02 (secure import)
      * p2: operation (Init-Update-Final)
      * data:
-     *      (init): [ header | (optional) id_pubkey(2b) | IV(16b) | secret_size(2b)]
+     *      (init): [ header | (optional) id_pubkey(2b) | (optional) IV(16b) | secret_size(2b)]
      *      (update):[chunk_size(2b) | data_blob ]
      *      (final): [chunk_size(2b) | data_blob | (if encrypted) hmac(20b) ]
      * return:
@@ -1796,7 +1795,6 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         short buffer_offset = ISO7816.OFFSET_CDATA;
-        //short recv_offset = (short)0;
         short obj_offset = (short)0;
         short obj_base = (short)0;
         short data_size= (short)0;// ?
@@ -1811,7 +1809,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 lock_id_pubkey=(short)-1;
                 logger.createLog(INS_IMPORT_SECRET, lock_id, lock_id_pubkey, (short)0x0000);
                 
-                // TODO: check lock?
                 if (bytes_left<SECRET_HEADER_SIZE)
                     ISOException.throwIt(SW_INVALID_PARAMETER); 
                 
@@ -1820,10 +1817,9 @@ public class SeedKeeper extends javacard.framework.Applet {
                 buffer_offset++; // skip 'origin'
 
                 // we don't check export rights, bits outside mask are just ignored
+                // we may add more options in future version outside this mask
                 byte export_rights= (byte)(buffer[buffer_offset]&SECRET_EXPORT_MASK);
                 buffer_offset++;
-                // if ((export_rights < SECRET_EXPORT_FORBIDDEN) || (export_rights > SECRET_EXPORT_SECUREONLY))
-                //     ISOException.throwIt(SW_INVALID_PARAMETER);
                 buffer_offset+=7; // skip export_nb_plain, export_nb_secure, export_counter_pubkey and fingerprint
                 byte RFU1= buffer[buffer_offset];
                 buffer_offset++;
@@ -1854,16 +1850,12 @@ public class SeedKeeper extends javacard.framework.Applet {
                     // get pubkey
                     short base_pubkey= om_secrets.getBaseAddress(OM_TYPE, lock_id_pubkey);
                     if (base_pubkey==(short)0xFFFF){
-                        //resetLock();
-                        //ISOException.throwIt(SW_OBJECT_NOT_FOUND);
                         resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
                     }
                     short obj_pubkey_size= om_secrets.getSizeFromAddress(base_pubkey);
                     om_secrets.getObjectData(base_pubkey, (short)0, recvBuffer, (short)0, obj_pubkey_size);
                     byte pubkey_type= recvBuffer[SECRET_OFFSET_TYPE];
                     if  (pubkey_type!=SECRET_TYPE_PUBKEY){
-                        // resetLock();
-                        // ISOException.throwIt(SW_INVALID_PARAMETER);//todo: better error code
                         resetLockThenThrow(SW_WRONG_SECRET_TYPE, false);
                     }
                     
@@ -1875,9 +1867,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                     dec_size= om_aes128_ecb.doFinal(recvBuffer, data_offset, (short)80, recvBuffer, data_offset); //size should be 65+1+padding
                     short pubkey_size= recvBuffer[data_offset];
                     if (pubkey_size != 65){
-                        //todo: check if compressed keys are supported
-                        // resetLock();
-                        // ISOException.throwIt(SW_INVALID_PARAMETER);
                         resetLockThenThrow(SW_INVALID_PARAMETER, false);
                     }
                     // compute shared static key 
@@ -1901,7 +1890,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 // new in SeedKeeper v0.2: get padded secret size (this allows to reserve memory directly)
                 // if memory size is wrong, 
                 if (bytes_left<2){//secret_size
-                    //ISOException.throwIt(SW_INVALID_PARAMETER);
                     resetLockThenThrow(SW_INVALID_PARAMETER, false);
                 }
                 // compute object size
@@ -1932,20 +1920,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 om_secrets.setObjectData(obj_base, SECRET_OFFSET_LABEL, buffer, label_offset, label_size);
                 obj_offset+= (SECRET_HEADER_SIZE+label_size);
 
-                // // load (not so sensitive) header data from buffer
-                // recvBuffer[SECRET_OFFSET_TYPE]= type;
-                // recvBuffer[SECRET_OFFSET_ORIGIN]= lock_transport_mode; 
-                // recvBuffer[SECRET_OFFSET_EXPORT_CONTROL]= export_rights;
-                // recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
-                // recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
-                // recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0;
-                // Util.arrayFillNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE, (byte)0); //todo: copy fingerprint from import?
-                // recvBuffer[SECRET_OFFSET_RFU1]= RFU1;
-                // recvBuffer[SECRET_OFFSET_RFU2]= RFU2;
-                // recvBuffer[SECRET_OFFSET_LABEL_SIZE]= (byte) (label_size & 0x7f);
-                // Util.arrayCopyNonAtomic(buffer, label_offset, recvBuffer, SECRET_OFFSET_LABEL, label_size);
-                // recv_offset+= (SECRET_HEADER_SIZE+label_size);
-                
                 // initialize cipher 
                 om_aes128_ecb.init(om_encryptkey, Cipher.MODE_ENCRYPT);
                 sha256.reset(); //for fingerprinting the secret
@@ -1953,7 +1927,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 //save state to ensure atomicity between APDU calls
                 lock_ins= INS_IMPORT_SECRET;
                 lock_lastop= OP_INIT;
-                // lock_recv_offset= recv_offset;
                 lock_obj_offset= obj_offset;
                 lock_obj_size= obj_size;
                 lock_data_size= (short)0;
@@ -1966,24 +1939,18 @@ public class SeedKeeper extends javacard.framework.Applet {
                         (lock_ins!= INS_IMPORT_SECRET) ||
                         (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
                 {
-                    //resetLockException();
                     resetLockThenThrow(SW_LOCK_ERROR, true);
                 }
 
                 if (bytes_left<2){
-                    // resetLock();// TODO: reset or not?
-                    // ISOException.throwIt(SW_INVALID_PARAMETER);
                     resetLockThenThrow(SW_INVALID_PARAMETER, true);
                 }
 
                 // load the new (sensitive) data
-                // recv_offset = lock_recv_offset;
                 data_size= Util.getShort(buffer, buffer_offset);
                 buffer_offset+=2;               
                 bytes_left-=2;
                 if (bytes_left<data_size){
-                    // resetLock();// TODO: reset or not?
-                    // ISOException.throwIt(SW_INVALID_PARAMETER);
                     resetLockThenThrow(SW_INVALID_PARAMETER, true);
                 }
                 
@@ -1996,32 +1963,20 @@ public class SeedKeeper extends javacard.framework.Applet {
                 
                 // hash for fingerprinting & (re)encrypt data
                 sha256.update(buffer, buffer_offset, data_size);
-                // try{
-                //     enc_size= om_aes128_ecb.update(buffer, buffer_offset, data_size, recvBuffer, recv_offset);
-                // } catch (ArrayIndexOutOfBoundsException e){
-                //     resetLock();// TODO: reset or not?
-                //     ISOException.throwIt(SW_IMPORTED_DATA_TOO_LONG);}
                 enc_size= om_aes128_ecb.update(buffer, buffer_offset, data_size, buffer, buffer_offset);
-
 
                 // check size
                 short obj_bytes_left= (short)(lock_obj_size - lock_obj_offset);
                 if (obj_bytes_left<enc_size){
-                    // resetLock();// TODO: reset or not?
-                    // ISOException.throwIt(SW_IMPORTED_DATA_TOO_LONG);// todo new SW code
                     resetLockThenThrow(SW_IMPORTED_DATA_TOO_LONG, true);
                 }
                 // find object then copy data to object
                 obj_base = om_secrets.getBaseAddress(OM_TYPE, lock_id);
                 if (obj_base==(short)0xFFFF){
-                    // resetLock();// todo: reset object
-                    // logger.updateLog(INS_IMPORT_SECRET, lock_id, lock_id_pubkey, SW_OBJECT_NOT_FOUND);
-                    // ISOException.throwIt(SW_OBJECT_NOT_FOUND);
                     resetLockThenThrow(SW_OBJECT_NOT_FOUND, true);
                 } 
                 om_secrets.setObjectData(obj_base, lock_obj_offset, buffer, buffer_offset, enc_size);
 
-                //recv_offset+= enc_size;
                 lock_data_size+=data_size;
                 lock_obj_offset+=enc_size;
 
@@ -2030,7 +1985,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 //lock_enabled = true;
                 //lock_ins= INS_IMPORT_ENCRYPTED_SECRET;
                 lock_lastop= OP_PROCESS;
-                //lock_recv_offset= recv_offset;
                 return (short)0;
 
             case OP_FINALIZE:
@@ -2039,7 +1993,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                         (lock_ins!= INS_IMPORT_SECRET) ||
                         (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
                 {
-                    //resetLockException();
                     resetLockThenThrow(SW_LOCK_ERROR, true);
 
                 }
@@ -2050,10 +2003,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     data_size= Util.getShort(buffer, buffer_offset);
                     buffer_offset+=2;
                     bytes_left-=2;  
-                    
                     if (bytes_left<data_size){
-                        // resetLock();
-                        // ISOException.throwIt(SW_INVALID_PARAMETER);
                         resetLockThenThrow(SW_INVALID_PARAMETER, true);
                     }  
                 }else{
@@ -2067,23 +2017,17 @@ public class SeedKeeper extends javacard.framework.Applet {
                     buffer_offset+=data_size;
                     bytes_left-=data_size;
                     if (bytes_left<1){
-                        // resetLock();
-                        // ISOException.throwIt(SW_INVALID_PARAMETER);
                         resetLockThenThrow(SW_INVALID_PARAMETER, true);
                     }
                     short hmac_size= buffer[buffer_offset];
                     buffer_offset++;
                     bytes_left--;
                     if (hmac_size !=(short)20 || bytes_left<hmac_size){
-                        // resetLock();
-                        // ISOException.throwIt(SW_INVALID_PARAMETER);
                         resetLockThenThrow(SW_INVALID_PARAMETER, true);
                     }
                     secret_sha256.doFinal(buffer, (short)(ISO7816.OFFSET_CDATA+2), data_size, buffer, (short)(buffer_offset+hmac_size) );
                     short sign_size=HmacSha160.computeHmacSha160(secret_sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY, buffer, (short)(buffer_offset+hmac_size), (short)32, buffer, (short)(buffer_offset+hmac_size+32) );
                     if(Util.arrayCompare(buffer, buffer_offset, buffer, (short)(buffer_offset+hmac_size+32), (short)20) != (byte)0){
-                        // resetLock();
-                        // ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
                         resetLockThenThrow(SW_SECURE_IMPORT_WRONG_MAC, true);
                     }
                     
@@ -2102,29 +2046,15 @@ public class SeedKeeper extends javacard.framework.Applet {
                 }
                 
                 // finalize encrypt data
-                // recv_offset= lock_recv_offset;
-                // try{
-                //     enc_size= om_aes128_ecb.doFinal(buffer, buffer_offset, (short)(data_size+padsize), recvBuffer, recv_offset);
-                // } catch (ArrayIndexOutOfBoundsException e){
-                //     resetLock();// TODO: reset or not?
-                //     ISOException.throwIt(SW_IMPORTED_DATA_TOO_LONG);}
-                // recv_offset+=enc_size;
-
-                // finalize encrypt data
                 enc_size= om_aes128_ecb.doFinal(buffer, buffer_offset, (short)(data_size+padsize), recvBuffer, (short)0);
                 // check that object has enough space
                 obj_bytes_left = (short)(lock_obj_size - lock_obj_offset);
                 if (obj_bytes_left<enc_size){ 
-                    // resetLock(); // todo???
-                    // ISOException.throwIt(SW_IMPORTED_DATA_TOO_LONG);
                     resetLockThenThrow(SW_IMPORTED_DATA_TOO_LONG, true);
                 }
                 // find object then copy encrypted data
                 obj_base = om_secrets.getBaseAddress(OM_TYPE, lock_id);
                 if (obj_base==(short)0xFFFF){
-                    // resetLock();// todo: reset object
-                    // logger.updateLog(INS_IMPORT_SECRET, lock_id, lock_id_pubkey, SW_OBJECT_NOT_FOUND);
-                    // ISOException.throwIt(SW_OBJECT_NOT_FOUND);
                     resetLockThenThrow(SW_OBJECT_NOT_FOUND, true);
                 } 
                 // what if object size is too big?
@@ -2143,29 +2073,18 @@ public class SeedKeeper extends javacard.framework.Applet {
                 sha256.doFinal(buffer, buffer_offset, data_size, buffer, (short)2);
                 om_secrets.setObjectData(obj_base, SECRET_OFFSET_FINGERPRINT, buffer, (short)2, SECRET_FINGERPRINT_SIZE);
 
-                // // save to next available object
-                // // Check if object exists
-                // while (om_secrets.exists(OM_TYPE, om_nextid)){
-                //     om_nextid++;
-                // }
-                // short base= om_secrets.createObject(OM_TYPE, om_nextid, recv_offset);
-                // om_secrets.setObjectData(base, (short)0, recvBuffer, (short)0, recv_offset);
-                
                 // log operation
                 logger.updateLog(INS_IMPORT_SECRET, lock_id, lock_id_pubkey, (short)0x9000);
                 
                 // Fill the R-APDU buffer
                 Util.setShort(buffer, (short) 0, lock_id);
-                //om_nextid++;
-                //Util.arrayCopyNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, buffer, (short)2, SECRET_FINGERPRINT_SIZE);
                 
                 // Release lock & send response
                 lock_enabled = false;
                 lock_ins= 0x00;
                 lock_lastop= 0x00;
-                //lock_recv_offset= 0x00;
-                lock_data_size= 0x00;
                 lock_transport_mode= 0x00;
+                lock_data_size= 0x00;
                 return (short)(2+SECRET_FINGERPRINT_SIZE);
 
             default:
@@ -2175,7 +2094,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         // Send default response
         return (short)0;    
     }
-    ////////////////
     
     /** 
      * This function exports a secret in plaintext or encrypted to the host.
@@ -2210,7 +2128,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         
         short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         short buffer_offset = ISO7816.OFFSET_CDATA;
-        //short recv_offset=(short)0;
         short obj_base=(short)0;
         short dec_size=(short)0;
         short enc_size=(short)0;
@@ -2224,7 +2141,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 lock_ins= INS_EXPORT_SECRET;
                 lock_lastop= OP_INIT;
                 lock_data_remaining= (short)0;
-                //lock_recv_offset= (short)0;
                 lock_obj_offset= (short)0;
                 lock_id_pubkey= (short)-1;
                 lock_id= (short)-1;
@@ -2235,8 +2151,6 @@ public class SeedKeeper extends javacard.framework.Applet {
 
                 // get id
                 if (bytes_left<2){
-                    // resetLock();// TODO: reset or not?
-                    // ISOException.throwIt(SW_INVALID_PARAMETER);
                     resetLockThenThrow(SW_INVALID_PARAMETER, false);
                 }
                 buffer_offset = ISO7816.OFFSET_CDATA;
@@ -2245,8 +2159,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 
                 if (lock_transport_mode==SECRET_EXPORT_SECUREONLY){
                     if (bytes_left<4){
-                        // resetLock();// TODO: reset or not?
-                        // ISOException.throwIt(SW_INVALID_PARAMETER);
                         resetLockThenThrow(SW_INVALID_PARAMETER, false);
                     }
                     lock_id_pubkey= Util.getShort(buffer, buffer_offset);
@@ -2254,8 +2166,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                     // get pubkey
                     short base_pubkey= om_secrets.getBaseAddress(OM_TYPE, lock_id_pubkey);
                     if (base_pubkey==(short)0xFFFF){
-                        // resetLock();
-                        // ISOException.throwIt(SW_OBJECT_NOT_FOUND);
                         resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
                     }
                     
@@ -2263,17 +2173,13 @@ public class SeedKeeper extends javacard.framework.Applet {
                     om_secrets.getObjectData(base_pubkey, (short)0, recvBuffer, (short)0, obj_pubkey_size);
                     byte pubkey_type= recvBuffer[SECRET_OFFSET_TYPE];
                     if  (pubkey_type!=SECRET_TYPE_PUBKEY){
-                        //todo: check if compressed keys are supported
-                        // resetLock();
-                        // ISOException.throwIt(SW_INVALID_PARAMETER);//todo: better error code 
-                        resetLockThenThrow(SW_INVALID_PARAMETER, false); // todo better error code
+                        resetLockThenThrow(SW_WRONG_SECRET_TYPE, false);
                     }
                     // update export_pubkey_counter in object
                     recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]+=1;
                     om_secrets.setObjectByte(base_pubkey, SECRET_OFFSET_EXPORT_COUNTER, recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]);
                     
                     // get data 
-                    //label_size= Util.makeShort((byte)0, recvBuffer[SECRET_OFFSET_LABEL_SIZE]);
                     label_size= recvBuffer[SECRET_OFFSET_LABEL_SIZE];
                     short data_offset= (short) (SECRET_HEADER_SIZE + label_size);
                     // initialize cipher for pubkey decryption
@@ -2281,9 +2187,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                     dec_size= om_aes128_ecb.doFinal(recvBuffer, data_offset, (short)80, recvBuffer, data_offset); //size should be 65+1+padding
                     short pubkey_size= recvBuffer[data_offset];
                     if (pubkey_size != 65){
-                        //todo: check if compressed keys are supported
-                        // resetLock();
-                        // ISOException.throwIt(SW_INVALID_PARAMETER);
                         resetLockThenThrow(SW_INVALID_PARAMETER, false);
                     }
                     
@@ -2302,55 +2205,35 @@ public class SeedKeeper extends javacard.framework.Applet {
                 // get secret object from storage
                 obj_base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
                 if (obj_base==(short)0xFFFF){
-                    // resetLock();
-                    // logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_OBJECT_NOT_FOUND);
-                    // ISOException.throwIt(SW_OBJECT_NOT_FOUND);
                     resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
                 }
                 short obj_size= om_secrets.getSizeFromAddress(obj_base);
                 byte export_rights= (byte)(om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL) & SECRET_EXPORT_MASK);
-                //om_secrets.getObjectData(obj_base, (short)0, recvBuffer, (short)0, obj_size);
                 // check export rights & update export_nb in object
                 if (lock_transport_mode== SECRET_EXPORT_ALLOWED){
                     if (export_rights!=SECRET_EXPORT_ALLOWED){
-                        // resetLock();
-                        // logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_EXPORT_NOT_ALLOWED);
-                        // ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
                         resetLockThenThrow(SW_EXPORT_NOT_ALLOWED, false);
                     }
                     byte counter = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN);
                     counter++;
                     om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN, counter);
-                    // recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]+=1; 
-                    // om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN, recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]);
                 }
                 else{
                     if (export_rights!=SECRET_EXPORT_ALLOWED && export_rights!=SECRET_EXPORT_SECUREONLY){
-                        // resetLock();
-                        // logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_EXPORT_NOT_ALLOWED);
-                        // ISOException.throwIt(SW_EXPORT_NOT_ALLOWED);
                         resetLockThenThrow(SW_EXPORT_NOT_ALLOWED, false);
                     }
                     byte counter = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE);
                     counter++;
                     om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, counter);
-                    // recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]+=1; 
-                    // om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]);   
                 }
                 
                 // copy id & header to buffer
                 Util.setShort(buffer, (short)0, lock_id);
-                //label_size= Util.makeShort((byte)0, recvBuffer[SECRET_OFFSET_LABEL_SIZE]);
                 label_size= om_secrets.getObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE);
-                //Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
                 om_secrets.getObjectData(obj_base, (short)0, buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size));
                 lock_obj_offset= (short)(SECRET_HEADER_SIZE+label_size);
-                //recv_offset= (short)(SECRET_HEADER_SIZE+label_size);
-                //lock_recv_offset= recv_offset;
                 lock_data_remaining= (short)(obj_size-lock_obj_offset);
                 
-
-
                 // save IV
                 if (lock_transport_mode== SECRET_EXPORT_SECUREONLY){
                     Util.arrayCopyNonAtomic(secret_sc_buffer, OFFSET_SC_IV, buffer,(short)(2+SECRET_HEADER_SIZE+label_size), SIZE_SC_IV);
@@ -2386,7 +2269,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 if ( (lock_ins!= INS_EXPORT_SECRET) ||
                      (lock_lastop!= OP_INIT && lock_lastop != OP_PROCESS))
                 {
-                    //resetLockException(); //TODO: log error?
                     resetLockThenThrow(SW_LOCK_ERROR, false);
                 }
                 
@@ -2396,15 +2278,11 @@ public class SeedKeeper extends javacard.framework.Applet {
                     // get secret from storage
                     obj_base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
                     if (obj_base==(short)0xFFFF){
-                        // resetLock();
-                        // logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_OBJECT_NOT_FOUND);
-                        // ISOException.throwIt(SW_OBJECT_NOT_FOUND);
                         resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
                     }
                     //temporary copy chunk from object to recvBuffer
                     om_secrets.getObjectData(obj_base, lock_obj_offset, recvBuffer, (short)0, chunk_size);
                     dec_size= om_aes128_ecb.update(recvBuffer, (short)0, chunk_size, buffer, (short)2);
-                    //dec_size= om_aes128_ecb.update(recvBuffer, lock_recv_offset, chunk_size, buffer, (short)2);
                     Util.setShort(buffer, (short)(0), dec_size);
                     
                     if (lock_transport_mode==SECRET_EXPORT_SECUREONLY){
@@ -2419,7 +2297,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                         sigECDSA.update(buffer, (short)2, dec_size);
                     }
                     
-                    //lock_recv_offset+= chunk_size;
                     lock_obj_offset+= chunk_size;
                     lock_data_remaining-=chunk_size;
                     
@@ -2432,9 +2309,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                     // get secret from storage
                     obj_base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
                     if (obj_base==(short)0xFFFF){
-                        // resetLock();
-                        // logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, SW_OBJECT_NOT_FOUND);
-                        // ISOException.throwIt(SW_OBJECT_NOT_FOUND);
                         resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
                     }
                     //temporary copy chunk from object to recvBuffer
@@ -2464,7 +2338,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                         Util.setShort(buffer, (short)(2+dec_size), sign_size);
                     }
                     
-                    //Util.setShort(buffer, (short)(0), dec_size);
                     lock_obj_offset+= lock_data_remaining;
                     lock_data_remaining=(short)0;
                                         
@@ -2472,14 +2345,12 @@ public class SeedKeeper extends javacard.framework.Applet {
                     logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, (short)0x9000);
                     
                     // update/finalize lock
-                    //Util.arrayFillNonAtomic(recvBuffer, (short)0, lock_recv_offset, (byte)0x00);// erase recvBuffer
                     lock_enabled = false;
                     lock_ins= (byte)0x00;
                     lock_lastop= (byte)0x00;
                     lock_id=(short)-1;
                     lock_id_pubkey=(short)-1;
                     lock_transport_mode= (byte)0;
-                    //lock_recv_offset=(short)0;
                     lock_obj_offset=(short)0;
                     
                     // the client can recover full public-key from the signature or
@@ -2488,7 +2359,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                     return (short)(2+dec_size+2+sign_size);                
                 }
             default:
-                //resetLock();
                 ISOException.throwIt(SW_INCORRECT_P2);
         }// end switch   
         
