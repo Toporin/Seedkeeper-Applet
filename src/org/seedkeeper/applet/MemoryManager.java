@@ -42,7 +42,6 @@ public class MemoryManager {
     private byte ptr[] = null;
     // Free memory list
     private short free_head = NULL_OFFSET;
-
     
     /**
      * Constructor for the MemoryManager class
@@ -52,7 +51,6 @@ public class MemoryManager {
      */
     public MemoryManager(final short mem_size) {
         MEM_SIZE=mem_size;
-        //Init(mem_size);
         if (ptr != null)
             return;
         // Allocate the memory
@@ -65,20 +63,6 @@ public class MemoryManager {
         // set the pointer to the head node
         free_head = (short) 0;
     }
-
-//  private void Init(short mem_size) {
-//      if (ptr != null)
-//          return;
-//      // Allocate the memory
-//      ptr = new byte[mem_size];
-//      // Setup the free memory list
-//      // set the size
-//      Util.setShort(ptr, (short) 0, (short) mem_size);
-//      // set the pointer to EndOfList
-//      Util.setShort(ptr, (short) 2, (short) NULL_OFFSET);
-//      // set the pointer to the head node
-//      free_head = (short) 0;
-//  }
     
     /**
      * Reset memory
@@ -290,6 +274,15 @@ public class MemoryManager {
             offset = Util.getShort(ptr, (short) (offset + 2));
         }
         return total;
+    }
+
+    /**
+     * Get total memory
+     * 
+     * @return The total amount of available memory
+     */
+    public short totalmem() {
+        return MEM_SIZE;
     }
 
     /**

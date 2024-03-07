@@ -145,6 +145,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte INS_PROCESS_SECURE_CHANNEL = (byte) 0x82;
 
     // SeedKeeper
+    private final static byte INS_GET_SEEDKEEPER_STATUS= (byte)0xA7;
     private final static byte INS_GENERATE_MASTERSEED= (byte)0xA0;
     private final static byte INS_GENERATE_RANDOM_SECRET= (byte)0xA3;
     private final static byte INS_GENERATE_2FA_SECRET= (byte)0xAE; 
@@ -280,7 +281,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static short SW_DEBUG_FLAG = (short) 0x9FFF;
 
     // KeyBlob Encoding in Key Blobs
-    private final static byte BLOB_ENC_PLAIN = (byte) 0x00;
+    //private final static byte BLOB_ENC_PLAIN = (byte) 0x00;
 
     // Cipher Operations admitted in ComputeCrypt()
     private final static byte OP_INIT = (byte) 0x01;
@@ -795,6 +796,9 @@ public class SeedKeeper extends javacard.framework.Applet {
             //     break;
             case INS_GET_STATUS:
                 sizeout= GetStatus(apdu, buffer);
+                break;
+            case INS_GET_SEEDKEEPER_STATUS:
+                sizeout= GetSeedKeeperStatus(apdu, buffer);
                 break;
             case INS_CARD_LABEL:
                 sizeout= card_label(apdu, buffer);
@@ -2799,7 +2803,49 @@ public class SeedKeeper extends javacard.framework.Applet {
 
         return pos;
     }
-    
+
+    /**
+     * This function retrieves information specific about the SeedKeeper applet running on the smart
+     * card, and useful information about the status of current session such as:
+     *      - number of secrets (objects) stored in the card
+     *      - total memory available
+     *      - free memory available
+     *      - total number of events logged
+     *      - number of logs available (older logs are overwritten)
+     *      - last event logged
+     * 
+     *  ins: 0xA7
+     *  p1: 0x00 
+     *  p2: 0x00 
+     *  data: none
+     *  return: [nb_objects(2b) | total_memory(2b) | free_mem(2b) | nb_total_logs(2b) | nb_avail_logs(2b) | last_log(7)]
+     */
+    private short GetSeedKeeperStatus(APDU apdu, byte[] buffer) {
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        short buffer_offset = (short) 0;
+        // memory status
+        Util.setShort(buffer, buffer_offset, om_secrets.getObjectNumber());
+        buffer_offset+=(short)2;
+        Util.setShort(buffer, buffer_offset, om_secrets.totalmem());
+        buffer_offset+=(short)2;
+        Util.setShort(buffer, buffer_offset, om_secrets.freemem());
+        buffer_offset+=(short)2;
+
+
+        // logging status [nb_total_logs(2b) | nb_avail_logs(2b) | last_log(7b)]
+        boolean is_log= logger.getFirstRecord(buffer, buffer_offset);
+        if (!is_log){
+            // empty log
+            Util.arrayFillNonAtomic(buffer, (short)(buffer_offset+4), Logger.LOG_SIZE, (byte)0);
+        }
+        buffer_offset+= (short)(4+Logger.LOG_SIZE);
+
+        return buffer_offset;
+    }
+
     /**
      * This function allows to define or recover a short description of the card.
      * 

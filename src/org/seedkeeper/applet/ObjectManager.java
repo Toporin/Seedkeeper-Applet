@@ -61,6 +61,9 @@ public class ObjectManager {
     /** Head of the objects' list */
     private short obj_list_head = MemoryManager.NULL_OFFSET;
 
+    /** Number of secret stored */
+    private short nb_objects = (short)0;
+
     /**
      * Constructor for the ObjectManager class.
      * 
@@ -84,7 +87,35 @@ public class ObjectManager {
     public boolean resetObjectManager(boolean secure_erase) {
         mem.resetMemory(secure_erase);
         obj_list_head = MemoryManager.NULL_OFFSET;
+        nb_objects= (short)0;
         return true;
+    }
+
+    /**
+     * Get available free memory
+     * 
+     * @return The total amount of available free memory
+     */
+    public short freemem() {
+        return mem.freemem();
+    }
+
+    /**
+     * Get total memory
+     * 
+     * @return The total amount of memory
+     */
+    public short totalmem() {
+        return mem.totalmem();
+    }
+
+    /**
+     * Get number of object in memory
+     * 
+     * @return The number of object in memory
+     */
+    public short getObjectNumber() {
+        return nb_objects;
     }
 
     /**
@@ -118,6 +149,7 @@ public class ObjectManager {
         
         /* Add to the map */
         // map.addEntry(type, id, base);
+        nb_objects++;
 
         // Return data-address
         return (short) (base + OBJ_HEADER_SIZE);
@@ -238,6 +270,7 @@ public class ObjectManager {
 
             // Free memory
             mem.free(base);
+            nb_objects--;
             return true;
         } 
             
@@ -331,11 +364,6 @@ public class ObjectManager {
      * 
      * @see #getNextRecord
      */
-//    public boolean getFirstRecord(byte[] buffer, short offset) {
-//        it = obj_list_head;
-//        return getNextRecord(buffer, offset);
-//    }
-    /** returns the base address of the object instead of record **/
     public short getFirstRecord() {
         it = obj_list_head;
         return getNextRecord();

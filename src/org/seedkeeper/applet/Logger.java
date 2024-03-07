@@ -40,7 +40,7 @@ public class Logger {
     /** index to last log */
     private short head;
     
-    /** number of logs **/
+    /** number of events logged **/
     private short nbtotal_logs;
     //private short nbavail_logs; // todo: remove?
     private short LOGS_SIZE;
@@ -51,8 +51,8 @@ public class Logger {
     /**
      * Constructor for the Logger class.
      * 
-     * @param mem_size
-     *            The size (in byte) of memory allocated
+     * @param nb_records
+     *            The log capacity (number of records) to reserve in memory
      */
     public Logger(short nb_records) {
         LOGS_SIZE= (short)(nb_records*LOG_SIZE);
