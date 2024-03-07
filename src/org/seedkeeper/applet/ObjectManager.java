@@ -25,7 +25,6 @@ import javacard.framework.ISOException;
  *   short next (2 byte)
  *   short obj_class (2 bytes) // TODO: remove - unused?
  *   short obj_id (2 bytes)
- *   //byte[] ACL (6 bytes) // removed
  *   short obj_size (2 bytes)
  *   byte[] data
  * </pre>
@@ -42,17 +41,10 @@ public class ObjectManager {
     private final static byte OBJ_H_CLASS = (byte) 2; // Short ocj_class; // todo: unused?
     public  final static byte OBJ_H_ID = (byte) 4; // Short obj_id;
     private final static byte OBJ_H_SIZE = (byte) 6;//12; // Short size;
-    //private final static byte OBJ_H_DATA = (byte) 8;//14;
 
     /** There have been memory problems on the card */
     public final static short SW_NO_MEMORY_LEFT = (short) 0x9C01;
     public final static short SW_OBJECT_NOT_FOUND= (short) 0x9C08;
-
-    /**
-     * Size of an Object Record filled by getFirstRecord() or getNextRecord():
-     * ID, Size, ACL
-     */
-    //public final static short RECORD_SIZE = (short) (4 + 4);
 
     /**
      * Iterator on objects. Stores the offset of the last retrieved object's
@@ -191,20 +183,9 @@ public class ObjectManager {
         return false;
     }
 
-
-
-
-
-//    /** Write data at the specified location in an object */
-//    public void setObjectData(short type, short id, short dst_offset, byte[] src_data, short src_offset, short len) {
-//        // TODO: short dst_base = map.getEntry(type, id);
-//        short dst_base = getEntry(type, id);
-//        mem.setBytes(dst_base, dst_offset, src_data, src_offset, len);
-//    }
     /** Write data at the specified location in an object */
     public void setObjectData(short base, short base_offset, byte[] src_data, short src_offset, short len) {
         // TODO: short dst_base = map.getEntry(type, id);
-        //short dst_base = getEntry(type, id);
         mem.setBytes(base, base_offset, src_data, src_offset, len);
     }
     public void setObjectByte(short base, short base_offset, byte val) {
@@ -212,15 +193,8 @@ public class ObjectManager {
     }
 
     /** Read data from the specified location in an object */
-//    public void getObjectData(byte[] dst_data, short dst_offset,
-//            short type, short id, short src_offset, short len) {
-//        // TODO: short dst_base = map.getEntry(type, id);
-//        short src_base = getEntry(type, id);
-//        mem.getBytes(dst_data, dst_offset, src_base, src_offset, len);
-//    }
     public void getObjectData(short base, short base_offset, byte[] dst_data, short dst_offset, short len) {
         // TODO: short dst_base = map.getEntry(type, id);
-        //short src_base = getEntry(type, id);
         mem.getBytes(dst_data, dst_offset, base, base_offset, len);
     }
     public byte getObjectByte(short base, short base_offset) {
@@ -353,11 +327,7 @@ public class ObjectManager {
      * first object, if any.
      * <p>
      * 
-     * @param buffer
-     *            The byte array into which the record will be copied
-     * @param offset
-     *            The offset in buffer[] at which the record will be copied
-     * @return True if an object was found. False if there are no objects.
+     * @return The base address of the first object, or NULL_OFFSET if none.
      * 
      * @see #getNextRecord
      */
@@ -375,32 +345,10 @@ public class ObjectManager {
      * Retrieves the information record of the next object, if any.
      * <p>
      * 
-     * @param buffer
-     *            The byte array into which the record will be copied
-     * @param offset
-     *            The offset in buffer[] at which the record will be copied
-     * @return True if an object was found. False if there are no more objects
-     *         to inspect.
+     * @return 
+     *          The base address of the object or NULL_OFFSET if there is no more object.
      * @see #getFirstRecord
      */
-//    public boolean getNextRecord(byte[] buffer, short offset) {
-//        if (it == MemoryManager.NULL_OFFSET)
-//            return false;
-//        // Setting Object Class
-//        Util.setShort(buffer, offset, mem.getShort(it, OBJ_H_CLASS));
-//        // Setting Object ID
-//        Util.setShort(buffer, (short) (offset + 2), mem.getShort(it, OBJ_H_ID));
-//        // Setting Size's M.S.Short to zero.
-//        Util.setShort(buffer, (short) (offset + 4), (short) 0);
-//        // Setting Size's L.S.Short
-//        Util.setShort(buffer, (short) (offset + 6), mem.getShort(it, (short) OBJ_H_SIZE));
-//        // Setting ACL
-//        //Util.arrayCopyNonAtomic(mem.getBuffer(), (short) (it + OBJ_H_ACL), buffer, (short) (offset + 8), OBJ_ACL_SIZE);
-//        // Advance iterator
-//        it = mem.getShort(it, OBJ_H_NEXT);
-//        return true;
-//    }
-    /** returns the base address of the object instead of record **/
     public short getNextRecord() {
         if (it == MemoryManager.NULL_OFFSET)
             return MemoryManager.NULL_OFFSET;
