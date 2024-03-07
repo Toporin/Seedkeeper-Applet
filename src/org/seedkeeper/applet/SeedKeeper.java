@@ -323,7 +323,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     
     // type of secrets stored
     private final static byte SECRET_TYPE_MASTER_SEED = (byte) 0x10;
-    private final static byte SECRET_TYPE_ENCRYPTED_MASTER_SEED = (byte) 0x20;
+    //private final static byte SECRET_TYPE_ENCRYPTED_MASTER_SEED = (byte) 0x20;// todo deprecate
     private final static byte SECRET_TYPE_BIP39_MNEMONIC = (byte) 0x30;
     private final static byte SECRET_TYPE_BIP39_MNEMONIC_V2 = (byte) 0x31;
     private final static byte SECRET_TYPE_ELECTRUM_MNEMONIC = (byte) 0x40;
@@ -337,7 +337,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_TYPE_CERTIFICATE= (byte) 0xA0;
     private final static byte SECRET_TYPE_2FA= (byte) 0xB0; // to deprecate and use SECRET_TYPE_KEY instead
     private final static byte SECRET_TYPE_DATA= (byte) 0xC0;
-    //private final static byte SECRET_TYPE_BITCOIN_DESCRIPTOR= (byte) 0xD0; // use data subtype
+    //private final static byte SECRET_TYPE_BITCOIN_DESCRIPTOR; // use data subtype
     
     // subtype (optionnal, default = 0)
     private final static byte SECRET_SUBTYPE_DEFAULT = (byte) 0x00;
@@ -1793,8 +1793,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
-        lock_transport_mode= buffer[ISO7816.OFFSET_P1];
-        if (lock_transport_mode != SECRET_EXPORT_ALLOWED && lock_transport_mode != SECRET_EXPORT_SECUREONLY)
+        byte transport_mode= buffer[ISO7816.OFFSET_P1];
+        if (transport_mode != SECRET_EXPORT_ALLOWED && transport_mode != SECRET_EXPORT_SECUREONLY)
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
         short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
@@ -1841,7 +1841,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 bytes_left-=label_size;
                  
                 // load public key used for secure key eschange
-                if (lock_transport_mode==SECRET_EXPORT_SECUREONLY){
+                if (transport_mode==SECRET_EXPORT_SECUREONLY){
                     if (bytes_left<2)
                         ISOException.throwIt(SW_INVALID_PARAMETER);
                     lock_id_pubkey= Util.getShort(buffer, buffer_offset);
@@ -1913,7 +1913,7 @@ public class SeedKeeper extends javacard.framework.Applet {
 
                 // save header to object
                 om_secrets.setObjectByte(obj_base, SECRET_OFFSET_TYPE, type);
-                om_secrets.setObjectByte(obj_base, SECRET_OFFSET_ORIGIN, lock_transport_mode);
+                om_secrets.setObjectByte(obj_base, SECRET_OFFSET_ORIGIN, transport_mode);
                 om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL, export_rights);
                 om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN, (byte)0);
                 om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, (byte)0);
@@ -1931,6 +1931,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 //save state to ensure atomicity between APDU calls
                 lock_ins= INS_IMPORT_SECRET;
                 lock_lastop= OP_INIT;
+                lock_transport_mode= transport_mode;
                 lock_obj_offset= obj_offset;
                 lock_obj_size= obj_size;
                 lock_data_size= (short)0;
@@ -2120,13 +2121,8 @@ public class SeedKeeper extends javacard.framework.Applet {
         if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
-        // boolean backwardFlag = false;
-        lock_transport_mode= buffer[ISO7816.OFFSET_P1];
-        // if (lock_transport_mode == 0x00){
-        //     backwardFlag= true;
-        //     lock_transport_mode= SECRET_EXPORT_SECUREONLY;
-        // }
-        if (lock_transport_mode != SECRET_EXPORT_ALLOWED && lock_transport_mode != SECRET_EXPORT_SECUREONLY)
+        byte transport_mode= buffer[ISO7816.OFFSET_P1];
+        if (transport_mode != SECRET_EXPORT_ALLOWED && transport_mode != SECRET_EXPORT_SECUREONLY)
             ISOException.throwIt(SW_INVALID_PARAMETER);
         // TODO p1=0x03: backward compatible export BIP39v2 seeds to satochip by converting them to simple Masterseed
         
@@ -2144,6 +2140,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 // set lock
                 lock_ins= INS_EXPORT_SECRET;
                 lock_lastop= OP_INIT;
+                lock_transport_mode= transport_mode;
                 lock_data_remaining= (short)0;
                 lock_obj_offset= (short)0;
                 lock_id_pubkey= (short)-1;
@@ -2246,12 +2243,6 @@ public class SeedKeeper extends javacard.framework.Applet {
                 // initialize cipher & signature/hash for next phases
                 om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
                 if (lock_transport_mode==SECRET_EXPORT_SECUREONLY){
-
-                    // backward compatibility option: change type from BIP39v2 to MasterSeed
-                    // if(backwardFlag && buffer[(short)(2+SECRET_OFFSET_TYPE)]==SECRET_TYPE_BIP39_MNEMONIC_V2){
-                    //     buffer[(short)(2+SECRET_OFFSET_TYPE)]= SECRET_TYPE_MASTER_SEED;
-                    // }
-
                     secret_sha256.reset();
                     //secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size)); // hash all header data, including label
                     secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE-1)); //do not hash label & label_size => may be changed during import
@@ -2284,7 +2275,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     if (obj_base==(short)0xFFFF){
                         resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
                     }
-                    //temporary copy chunk from object to recvBuffer
+                    //temporary copy chunk from object to recvBuffer and decrypt it
                     om_secrets.getObjectData(obj_base, lock_obj_offset, recvBuffer, (short)0, chunk_size);
                     dec_size= om_aes128_ecb.update(recvBuffer, (short)0, chunk_size, buffer, (short)2);
                     Util.setShort(buffer, (short)(0), dec_size);
