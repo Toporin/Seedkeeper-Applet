@@ -342,13 +342,16 @@ public class SeedKeeper extends javacard.framework.Applet {
     // subtype (optionnal, default = 0)
     private final static byte SECRET_SUBTYPE_DEFAULT = (byte) 0x00;
 
-    // export controls 
+    // export policy 
     private final static byte SECRET_EXPORT_MASK = (byte) 0x03; // mask for the export controls
     private final static byte SECRET_EXPORT_FORBIDDEN = (byte) 0x00; // never allowed
     private final static byte SECRET_EXPORT_ALLOWED = (byte) 0x01; //plain or encrypted
     private final static byte SECRET_EXPORT_SECUREONLY = (byte) 0x02; // only encrypted with authentikey
     private final static byte SECRET_EXPORT_AUTHENTICATED = (byte) 0x03; // RFU: only encrypted with certified authentikey
     
+    // Not an export policy, used for transport mode: export to satochip (reduce secret size for Satochip compatibility)
+    private final static byte SECRET_EXPORT_TOSATOCHIP = (byte) 0x04; 
+
     // use controls: use a secret to perform specific operations
     // For example a masterseed can be derived using BIP32, with extended keys exported
     // private final static byte SECRET_USAGE_MASK = (byte) 0x30; // mask for the export controls
@@ -389,6 +392,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     
     private final static byte AES_BLOCKSIZE= (byte)16;
     private final static byte SIZE_2FA= (byte)20;
+
+    private final static short CHUNK_SIZE= (short)128; // MUST be a multiple of 16; cut secret in chunks for exportSecret()
 
     // secure channel for secure secret import/export: the secret is encrypted and maced with a symmetric key derived using ECDH
     private static final byte[] SECRET_CST_SC = {'s','e','c','k','e','y', 's','e','c','m','a','c'};
@@ -2107,11 +2112,11 @@ public class SeedKeeper extends javacard.framework.Applet {
      * For secure export, an encryption key is generated using ECDH.
      * 
      * ins: 0xA2
-     * p1: 0x01 (plain export) or 0x02 (secure export)
+     * p1: 0x01 (plain export) or 0x02 (secure export) or 0x04 (compatible export to satochip)
      * p2: operation (Init-Update)
      * data: [ id(2b) | id_pubkey(2b) ]
      * return: 
-     *      (init):[ header | IV(16b) ]
+     *      (init):[ id(2b) | header | IV(16b) ]
      *      (next):[data_blob_size(2b) | data_blob ]
      *      (last):[data_blob_size(2b) | data_blob | sig_size(2b) | authentikey_sig] if plain export
      *             [data_blob_size(2b) | data_blob | hmac_size(2b) | hmac(20b)] if secure export 
@@ -2122,7 +2127,7 @@ public class SeedKeeper extends javacard.framework.Applet {
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         byte transport_mode= buffer[ISO7816.OFFSET_P1];
-        if (transport_mode != SECRET_EXPORT_ALLOWED && transport_mode != SECRET_EXPORT_SECUREONLY)
+        if (transport_mode != SECRET_EXPORT_ALLOWED && transport_mode != SECRET_EXPORT_SECUREONLY && transport_mode != SECRET_EXPORT_TOSATOCHIP)
             ISOException.throwIt(SW_INVALID_PARAMETER);
         // TODO p1=0x03: backward compatible export BIP39v2 seeds to satochip by converting them to simple Masterseed
         
@@ -2131,7 +2136,6 @@ public class SeedKeeper extends javacard.framework.Applet {
         short obj_base=(short)0;
         short dec_size=(short)0;
         short enc_size=(short)0;
-        short chunk_size=(short)128; // should be multiple of 16 // TODO: make static final
         byte label_size=(short)0;
         
         byte op = buffer[ISO7816.OFFSET_P2];
@@ -2158,7 +2162,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 lock_id= Util.getShort(buffer, buffer_offset);
                 buffer_offset+=2;
                 
-                if (lock_transport_mode==SECRET_EXPORT_SECUREONLY){
+                if (lock_transport_mode==SECRET_EXPORT_SECUREONLY || lock_transport_mode==SECRET_EXPORT_TOSATOCHIP){
                     if (bytes_left<4){
                         resetLockThenThrow(SW_INVALID_PARAMETER, false);
                     }
@@ -2209,8 +2213,17 @@ public class SeedKeeper extends javacard.framework.Applet {
                     resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
                 }
                 short obj_size= om_secrets.getSizeFromAddress(obj_base);
-                byte export_rights= (byte)(om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL) & SECRET_EXPORT_MASK);
+                
+                // check type if export to satochip
+                // if (lock_transport_mode== SECRET_EXPORT_TOSATOCHIP){
+                //     byte type = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_TYPE);
+                //     if (type != SECRET_TYPE_MASTER_SEED || type != SECRET_TYPE_2FA){
+                //         resetLockThenThrow(SW_WRONG_SECRET_TYPE, false);
+                //     }
+                // }
+
                 // check export rights & update export_nb in object
+                byte export_rights= (byte)(om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL) & SECRET_EXPORT_MASK);
                 if (lock_transport_mode== SECRET_EXPORT_ALLOWED){
                     if (export_rights!=SECRET_EXPORT_ALLOWED){
                         resetLockThenThrow(SW_EXPORT_NOT_ALLOWED, false);
@@ -2235,27 +2248,21 @@ public class SeedKeeper extends javacard.framework.Applet {
                 lock_obj_offset= (short)(SECRET_HEADER_SIZE+label_size);
                 lock_data_remaining= (short)(obj_size-lock_obj_offset);
                 
-                // save IV
-                if (lock_transport_mode== SECRET_EXPORT_SECUREONLY){
-                    Util.arrayCopyNonAtomic(secret_sc_buffer, OFFSET_SC_IV, buffer,(short)(2+SECRET_HEADER_SIZE+label_size), SIZE_SC_IV);
-                }
-                
                 // initialize cipher & signature/hash for next phases
                 om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
-                if (lock_transport_mode==SECRET_EXPORT_SECUREONLY){
+                
+                if (lock_transport_mode== SECRET_EXPORT_SECUREONLY){
+                    // save IV
+                    Util.arrayCopyNonAtomic(secret_sc_buffer, OFFSET_SC_IV, buffer,(short)(2+SECRET_HEADER_SIZE+label_size), SIZE_SC_IV);
                     secret_sha256.reset();
                     //secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size)); // hash all header data, including label
                     secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE-1)); //do not hash label & label_size => may be changed during import
-                }else{
+                    // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label | IV(16b)]
+                    return (short)(2+SECRET_HEADER_SIZE+label_size+SIZE_SC_IV);
+                } else{
                     sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
                     sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
-                }
-                // the client can recover full public-key from the signature or
-                // by guessing the compression value () and verifying the signature... 
-                // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label | sigsize(2) | sig]
-                if (lock_transport_mode== SECRET_EXPORT_SECUREONLY){
-                    return (short)(2+SECRET_HEADER_SIZE+label_size+SIZE_SC_IV);
-                }else{
+                    // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label]
                     return (short)(2+SECRET_HEADER_SIZE+label_size);
                 }
                 
@@ -2267,22 +2274,22 @@ public class SeedKeeper extends javacard.framework.Applet {
                     resetLockThenThrow(SW_LOCK_ERROR, false);
                 }
                 
+                // get secret from storage
+                obj_base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
+                if (obj_base==(short)0xFFFF){
+                    resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
+                }
+
                 // decrypt & export data chunk by chunk
-                if (lock_data_remaining>chunk_size){
-                    
-                    // get secret from storage
-                    obj_base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
-                    if (obj_base==(short)0xFFFF){
-                        resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
-                    }
+                if (lock_data_remaining>CHUNK_SIZE){
                     //temporary copy chunk from object to recvBuffer and decrypt it
-                    om_secrets.getObjectData(obj_base, lock_obj_offset, recvBuffer, (short)0, chunk_size);
-                    dec_size= om_aes128_ecb.update(recvBuffer, (short)0, chunk_size, buffer, (short)2);
+                    om_secrets.getObjectData(obj_base, lock_obj_offset, recvBuffer, (short)0, CHUNK_SIZE);
+                    dec_size= om_aes128_ecb.update(recvBuffer, (short)0, CHUNK_SIZE, buffer, (short)2);
                     Util.setShort(buffer, (short)(0), dec_size);
                     
                     if (lock_transport_mode==SECRET_EXPORT_SECUREONLY){
                         // reencrypt with shared export key
-                        enc_size= secret_sc_aes128_cbc.update(buffer, (short)2, chunk_size, buffer, (short)2);
+                        enc_size= secret_sc_aes128_cbc.update(buffer, (short)2, CHUNK_SIZE, buffer, (short)2);
                         Util.setShort(buffer, (short)(0), enc_size);
                         // assert (enc_size == dec_size)
                         // hashing for mac
@@ -2292,20 +2299,14 @@ public class SeedKeeper extends javacard.framework.Applet {
                         sigECDSA.update(buffer, (short)2, dec_size);
                     }
                     
-                    lock_obj_offset+= chunk_size;
-                    lock_data_remaining-=chunk_size;
+                    lock_obj_offset+= CHUNK_SIZE;
+                    lock_data_remaining-=CHUNK_SIZE;
                     
                     // buffer= [data_size(2b) | data_chunk]
                     return (short)(2+dec_size);
                 
                 //finalize last chunk
                 }else{ 
-                    
-                    // get secret from storage
-                    obj_base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
-                    if (obj_base==(short)0xFFFF){
-                        resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
-                    }
                     //temporary copy chunk from object to recvBuffer
                     om_secrets.getObjectData(obj_base, lock_obj_offset, recvBuffer, (short)0, lock_data_remaining);
                     // decrypt secret
