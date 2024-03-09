@@ -151,6 +151,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte INS_GENERATE_2FA_SECRET= (byte)0xAE; 
     private final static byte INS_IMPORT_SECRET= (byte)0xA1;
     private final static byte INS_EXPORT_SECRET= (byte)0xA2;
+    private final static byte INS_EXPORT_SECRET_TO_SATOCHIP= (byte)0xA8;
     private final static byte INS_RESET_SECRET= (byte)0xA5;
     private final static byte INS_LIST_SECRET_HEADERS= (byte)0xA6;
     private final static byte INS_PRINT_LOGS= (byte)0xA9;
@@ -834,6 +835,9 @@ public class SeedKeeper extends javacard.framework.Applet {
                 break;
             case INS_EXPORT_SECRET:
                 sizeout= exportSecret(apdu, buffer);
+                break;
+            case INS_EXPORT_SECRET_TO_SATOCHIP:
+                sizeout= exportSecretToSatochip(apdu, buffer);
                 break;
             case INS_RESET_SECRET:
                 sizeout= resetSecret(apdu, buffer);
@@ -2214,13 +2218,13 @@ public class SeedKeeper extends javacard.framework.Applet {
                 }
                 short obj_size= om_secrets.getSizeFromAddress(obj_base);
                 
-                // check type if export to satochip
-                // if (lock_transport_mode== SECRET_EXPORT_TOSATOCHIP){
-                //     byte type = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_TYPE);
-                //     if (type != SECRET_TYPE_MASTER_SEED || type != SECRET_TYPE_2FA){
-                //         resetLockThenThrow(SW_WRONG_SECRET_TYPE, false);
-                //     }
-                // }
+                //check type if export to satochip
+                if (lock_transport_mode== SECRET_EXPORT_TOSATOCHIP){
+                    byte type = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_TYPE);
+                    if (type != SECRET_TYPE_MASTER_SEED && type != SECRET_TYPE_2FA){
+                        resetLockThenThrow(SW_WRONG_SECRET_TYPE, false);
+                    }
+                }
 
                 // check export rights & update export_nb in object
                 byte export_rights= (byte)(om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL) & SECRET_EXPORT_MASK);
@@ -2251,7 +2255,14 @@ public class SeedKeeper extends javacard.framework.Applet {
                 // initialize cipher & signature/hash for next phases
                 om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
                 
-                if (lock_transport_mode== SECRET_EXPORT_SECUREONLY){
+                if (lock_transport_mode== SECRET_EXPORT_ALLOWED){
+                    sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+                    sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
+                    // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label]
+                    return (short)(2+SECRET_HEADER_SIZE+label_size);
+                }
+                else{ 
+                    // secure export
                     // save IV
                     Util.arrayCopyNonAtomic(secret_sc_buffer, OFFSET_SC_IV, buffer,(short)(2+SECRET_HEADER_SIZE+label_size), SIZE_SC_IV);
                     secret_sha256.reset();
@@ -2259,12 +2270,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                     secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE-1)); //do not hash label & label_size => may be changed during import
                     // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label | IV(16b)]
                     return (short)(2+SECRET_HEADER_SIZE+label_size+SIZE_SC_IV);
-                } else{
-                    sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-                    sigECDSA.update(buffer, (short)0, (short)(2+SECRET_HEADER_SIZE+label_size));
-                    // buffer= [id(2b) | type(1b) | export_control(1b) | nb_export_plain(1b) | nb_export_secure(1b) | label_size(1b) | label]
-                    return (short)(2+SECRET_HEADER_SIZE+label_size);
-                }
+                } 
                 
             case OP_PROCESS: // following requests
                 // check lock
@@ -2273,11 +2279,64 @@ public class SeedKeeper extends javacard.framework.Applet {
                 {
                     resetLockThenThrow(SW_LOCK_ERROR, false);
                 }
-                
+
                 // get secret from storage
                 obj_base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
                 if (obj_base==(short)0xFFFF){
                     resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
+                }
+
+                //for reexport to satochip, we must limit size of secret to export
+                if (lock_transport_mode==SECRET_EXPORT_TOSATOCHIP){
+                    // in case of masterseed with BIP39v2 data, we only need to export the masterseed to limit size footprint
+                    //temporary copy last chunk from object to recvBuffer
+                    if (lock_data_remaining>CHUNK_SIZE)
+                        lock_data_remaining= CHUNK_SIZE;
+                    om_secrets.getObjectData(obj_base, lock_obj_offset, recvBuffer, (short)0, lock_data_remaining);
+                    // decrypt secret
+                    dec_size= om_aes128_ecb.update(recvBuffer, (short)0, lock_data_remaining, buffer, (short)2);
+                    
+                    // in case of masterseed with BIP39v2 data, we only need to export the masterseed to limit size footprint
+                    byte secret_size = buffer[(short)2];
+                    if (secret_size>64){
+                        resetLockThenThrow(SW_WRONG_SECRET_TYPE, false);
+                    }
+                    secret_size++; // secret_size now includes size
+                    // redo padding with updated secret
+                    short pad_size = (short)(AES_BLOCKSIZE - (secret_size%AES_BLOCKSIZE));
+                    Util.arrayFillNonAtomic(buffer, (short)(2+secret_size), pad_size, (byte)pad_size);
+                    // reencrypt new data with shared export key
+                    dec_size= secret_sc_aes128_cbc.doFinal(buffer, (short)2, (short)(secret_size+pad_size), buffer, (short)2);
+                    Util.setShort(buffer, (short)(0), dec_size);
+
+                    // finalize reencryption with shared key
+                    // dec_size= secret_sc_aes128_cbc.doFinal(buffer, (short)2, dec_size, buffer, (short)2);
+                    // Util.setShort(buffer, (short)(0), dec_size);
+                    //todo: assert (dec_size==enc_size)
+                    
+                    // hash then hmac
+                    short sign_size=secret_sha256.doFinal(buffer, (short) 2, dec_size, buffer, (short)(2+dec_size+2) );
+                    sign_size=HmacSha160.computeHmacSha160(secret_sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY, buffer, (short)(2+dec_size+2), sign_size, buffer, (short)(2+dec_size+2) );
+                    Util.setShort(buffer, (short)(2+dec_size), sign_size);
+                    
+                    // simulate end of object
+                    // lock_obj_offset= lock_obj_size;
+                    // lock_data_remaining=(short)0;
+                                        
+                    // log operation to be updated later
+                    logger.updateLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, (short)0x9000);
+                    
+                    // update/finalize lock
+                    lock_enabled = false;
+                    lock_ins= (byte)0x00;
+                    lock_lastop= (byte)0x00;
+                    lock_id=(short)-1;
+                    lock_id_pubkey=(short)-1;
+                    lock_transport_mode= (byte)0;
+                    lock_obj_offset=(short)0;
+                    
+                    // buffer= [data_size(2b) | data_chunk | hmacsize(2) | hmac]
+                    return (short)(2+dec_size+2+sign_size);
                 }
 
                 // decrypt & export data chunk by chunk
@@ -2360,7 +2419,167 @@ public class SeedKeeper extends javacard.framework.Applet {
         
         return (short)(0); // should never happen
     }// end exportSecret
-            
+
+    /** 
+     * This function exports a secret for secure import to a Satochip.
+     * The secret is encrypted with a key is generated with ECDH, using the Satochip authentikey.
+     * Compared to the exportSecret() method, this method is executed in one phase, and the secret size is reduced to the minimum (max 64b).
+     * Only Masterseeds & 2FA secrets can be exported this way.
+     * 
+     * ins: 0xA8
+     * p1: 0x00
+     * p2: 0x00
+     * data: [ id(2b) | id_pubkey(2b) ]
+     * return: [ id(2b) | header(13b) | IV(16b) | encrypted_secret_size(2b) | encrypted_secret | hmac_size(2b) | hmac(20b) ]
+     */
+    private short exportSecretToSatochip(APDU apdu, byte[] buffer){
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        short bytes_left = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        short buffer_offset = ISO7816.OFFSET_CDATA;
+        short obj_base=(short)0;
+        short dec_size=(short)0;
+        short enc_size=(short)0;
+        short label_size=(short)0;
+                
+        // log operation to be updated later
+        logger.createLog(INS_EXPORT_SECRET, lock_id, lock_id_pubkey, (short)0x0000);
+
+        // get id
+        if (bytes_left<4){
+            resetLockThenThrow(SW_INVALID_PARAMETER, false);
+        }
+        lock_id= Util.getShort(buffer, buffer_offset);
+        buffer_offset+=2;
+        lock_id_pubkey= Util.getShort(buffer, buffer_offset);
+                    
+        // PUBKEY OBJECT
+        short base_pubkey= om_secrets.getBaseAddress(OM_TYPE, lock_id_pubkey);
+        if (base_pubkey==(short)0xFFFF){
+            resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
+        }
+
+        short obj_pubkey_size= om_secrets.getSizeFromAddress(base_pubkey);
+        om_secrets.getObjectData(base_pubkey, (short)0, recvBuffer, (short)0, obj_pubkey_size);
+        byte pubkey_type= recvBuffer[SECRET_OFFSET_TYPE];
+        if  (pubkey_type!=SECRET_TYPE_PUBKEY){
+            resetLockThenThrow(SW_WRONG_SECRET_TYPE, false);
+        }
+        // update export_pubkey_counter in object
+        recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]+=1;
+        om_secrets.setObjectByte(base_pubkey, SECRET_OFFSET_EXPORT_COUNTER, recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]);
+                    
+        // get pubkey data 
+        label_size= recvBuffer[SECRET_OFFSET_LABEL_SIZE];
+        short data_offset= (short) (SECRET_HEADER_SIZE + label_size);
+        // initialize cipher for pubkey decryption
+        om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
+        dec_size= om_aes128_ecb.doFinal(recvBuffer, data_offset, (short)80, recvBuffer, data_offset); //size should be 65+1+padding
+        short pubkey_size= recvBuffer[data_offset];
+        if (pubkey_size != 65){
+            resetLockThenThrow(SW_INVALID_PARAMETER, false);
+        }
+
+        // compute shared static key 
+        keyAgreement.init(authentikey_private);        
+        keyAgreement.generateSecret(recvBuffer, (short)(data_offset+1), (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
+        // derive secret_sessionkey & secret_mackey
+        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
+        Util.arrayCopyNonAtomic(recvBuffer, (short)33, secret_sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY);
+        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)0, (short)6, recvBuffer, (short)33);
+        secret_sc_sessionkey.setKey(recvBuffer,(short)33); // AES-128: 16-bytes key!!   
+        randomData.generateData(secret_sc_buffer, OFFSET_SC_IV, SIZE_SC_IV);
+        secret_sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_ENCRYPT, secret_sc_buffer, OFFSET_SC_IV, SIZE_SC_IV);
+        
+        // SECRET OBJECT
+        // get secret object from storage
+        obj_base= om_secrets.getBaseAddress(OM_TYPE, lock_id);
+        if (obj_base==(short)0xFFFF){
+            resetLockThenThrow(SW_OBJECT_NOT_FOUND, false);
+        }
+        short obj_size= om_secrets.getSizeFromAddress(obj_base);
+        
+        //check type if export to satochip
+        byte obj_type = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_TYPE);
+        if (obj_type != SECRET_TYPE_MASTER_SEED && obj_type != SECRET_TYPE_2FA){
+            resetLockThenThrow(SW_WRONG_SECRET_TYPE, false);
+        }
+
+        // check object export rights & update export_nb in object
+        byte export_rights= (byte)(om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_CONTROL) & SECRET_EXPORT_MASK);
+        if (export_rights!=SECRET_EXPORT_ALLOWED && export_rights!=SECRET_EXPORT_SECUREONLY){
+            resetLockThenThrow(SW_EXPORT_NOT_ALLOWED, false);
+        }
+        byte counter = om_secrets.getObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE);
+        counter++;
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, counter);
+
+        // reset buffer_offset to write output
+        buffer_offset= 0;
+
+        // copy id & header (without label) to buffer
+        Util.setShort(buffer, buffer_offset, lock_id);
+        buffer_offset+=2;
+        label_size= om_secrets.getObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE);
+        om_secrets.getObjectData(obj_base, (short)0, buffer, buffer_offset, SECRET_HEADER_SIZE); // header without label
+        buffer[(short)(buffer_offset+SECRET_OFFSET_LABEL_SIZE)]= (byte)0; // set label_size to 0
+        buffer_offset+=SECRET_HEADER_SIZE;
+        lock_obj_offset= (short)(SECRET_HEADER_SIZE+label_size);
+        lock_data_remaining= (short)(obj_size-lock_obj_offset);
+
+        // save IV
+        Util.arrayCopyNonAtomic(secret_sc_buffer, OFFSET_SC_IV, buffer, buffer_offset, SIZE_SC_IV);
+        buffer_offset+=SIZE_SC_IV;
+        buffer_offset+=2; // skip 2 bytes (dec_size) for later
+                    
+        // in case of masterseed with BIP39v2 data, we only need to export the masterseed to limit size footprint
+        //temporary copy first chunk of data from object to recvBuffer
+        if (lock_data_remaining>CHUNK_SIZE)
+            lock_data_remaining= CHUNK_SIZE;
+        om_secrets.getObjectData(obj_base, lock_obj_offset, recvBuffer, (short)0, lock_data_remaining);
+        // initialize cipher & decrypt secret
+        om_aes128_ecb.init(om_encryptkey, Cipher.MODE_DECRYPT);
+        dec_size= om_aes128_ecb.update(recvBuffer, (short)0, lock_data_remaining, buffer, buffer_offset);
+                    
+        // in case of masterseed with BIP39v2 data, we only need to export the masterseed to limit size footprint
+        short secret_size = buffer[buffer_offset];
+        if (secret_size>64){
+            resetLockThenThrow(SW_WRONG_SECRET_TYPE, false);
+        }
+        secret_size++; // secret_size now includes the size byte
+                    
+        // recompute & update fingerprint
+        secret_sha256.reset();
+        secret_sha256.doFinal(buffer, buffer_offset, secret_size, recvBuffer, (short)(0) );
+        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)(2+SECRET_OFFSET_FINGERPRINT), (short)4);
+
+        // redo padding with updated secret
+        short pad_size = (short)(AES_BLOCKSIZE - (secret_size%AES_BLOCKSIZE));
+        Util.arrayFillNonAtomic(buffer, (short)(buffer_offset+secret_size), pad_size, (byte)pad_size);
+        // reencrypt new data with shared export key
+        dec_size= secret_sc_aes128_cbc.doFinal(buffer, buffer_offset, (short)(secret_size+pad_size), buffer, buffer_offset);
+        Util.setShort(buffer, (short)(buffer_offset-2), dec_size);
+
+        // hash then hmac
+        secret_sha256.reset();
+        // hash header (without label_size & label)
+        secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE-1)); //do not hash label & label_size => may be changed during import
+        //secret_sha256.update(buffer, (short)2, (short)(SECRET_HEADER_SIZE+label_size)); // hash all header data, including label
+        // hash encrypted secret
+        short sign_size=secret_sha256.doFinal(buffer, buffer_offset, dec_size, buffer, (short)(buffer_offset+dec_size+2) );
+        sign_size=HmacSha160.computeHmacSha160(secret_sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY, buffer, (short)(buffer_offset+dec_size+2), sign_size, buffer, (short)(buffer_offset+dec_size+2) );
+        Util.setShort(buffer, (short)(buffer_offset+dec_size), sign_size);
+
+        // log operation to be updated later
+        logger.updateLog(INS_EXPORT_SECRET_TO_SATOCHIP, lock_id, lock_id_pubkey, (short)0x9000);
+        
+        // buffer= [id(2b) | header(13b)| IV(16b) | encrypted_secret_size(2b) | encrypted_secret | hmacsize(2) | hmac]
+        return (short)(buffer_offset+2+dec_size+2+sign_size);
+
+    }// end exportSecretToSatochip
+
     /** 
      * This function list all the objects stored in secure memory
      * Only the header data of each object is returned.
