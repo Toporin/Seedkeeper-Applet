@@ -315,7 +315,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     // for each element: [id | mnemonic | passphrase | master_seed | encrypted_master_seed | label | status | settings ]
     // status: externaly/internaly generated, shamir, bip39 or electrum, 
     // settings: can be exported in clear, 
-    private final static short OM_SIZE= (short) 0xFFF; //todo: optimize memory for different cards?
+    //private final static short OM_SIZE= (short) 0xFFF; //todo: optimize memory for different cards?
+    private static short OM_SIZE= (short) 0xFFF; // can be overwritten during applet installation using parameters
     private ObjectManager om_secrets;
     private AESKey om_encryptkey; // used to encrypt sensitive data in object
     private Cipher om_aes128_ecb; // 
@@ -520,7 +521,6 @@ public class SeedKeeper extends javacard.framework.Applet {
     private boolean personalizationDone=false;
     private ECPrivateKey authentikey_private;
     private ECPublicKey authentikey_public;
-    //private KeyPair authentikey_pair;
     private short authentikey_certificate_size=0;
     private byte[] authentikey_certificate;
     
@@ -528,31 +528,28 @@ public class SeedKeeper extends javacard.framework.Applet {
      * Methods *
      ****************************************/
 
-    private SeedKeeper(byte[] bArray, short bOffset, byte bLength) {
-        // FIXED: something should be done already here, not only with setup APDU
+    public static void install(byte[] bArray, short bOffset, byte bLength) {
+        // extract install parameters if any
+        byte aidLength = bArray[bOffset];
+        short controlLength = (short)(bArray[(short)(bOffset+1+aidLength)]&(short)0x00FF);
+        short dataLength = (short)(bArray[(short)(bOffset+1+aidLength+1+controlLength)]&(short)0x00FF);
 
-        /* If init pin code does not satisfy policies, internal error */
-        // if (!CheckPINPolicy(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length))
-        //     ISOException.throwIt(SW_INTERNAL_ERROR);
+        new SeedKeeper(bArray, (short) (bOffset+1+aidLength+1+controlLength+1), dataLength);
+    }
 
-        //ublk_pins = new OwnerPIN[MAX_NUM_PINS];
-        //pins = new OwnerPIN[MAX_NUM_PINS];
+    private SeedKeeper(byte[] bArray, short bOffset, short bLength) {
+
+        // recover OM_SIZE from install params
+        // For example, using Global Platform Pro:
+        // .\gp.exe -f -install .\SeedKeeper.cap -params 0FFF
+        if (bLength>=2){
+            OM_SIZE= Util.getShort(bArray, bOffset);
+        }
+
         pin = null;
 
         // NFC is enabled by default, can be modified with INS_SET_NFC_POLICY
         nfc_policy = NFC_ENABLED; 
-
-        // DONE: pass in starting PIN setting with instantiation
-        /* Setting initial PIN n.0 value */
-        //pins[0] = new OwnerPIN((byte) 3, (byte) PIN_INIT_VALUE.length); 
-        //pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
-        
-        // reset to factory
-        // try {
-        //     reset_array = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
-        // } catch (SystemException e) {
-        //     ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
-        // }
         
         // Temporary working arrays
         try {
@@ -629,21 +626,15 @@ public class SeedKeeper extends javacard.framework.Applet {
         Secp256k1.setCommonCurveParameters(authentikey_private);
         authentikey_public= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
         Secp256k1.setCommonCurveParameters(authentikey_public);
-        //authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
-        //authentikey_pair.genKeyPair();
         randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
         authentikey_private.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
         keyAgreement.init(authentikey_private);   
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form => silently fail after cap loaded
         authentikey_public.setW(recvBuffer, (short)0, (short)65);
         
-        // debug
+        // finally, register applet
         register();
     } // end of constructor
-
-    public static void install(byte[] bArray, short bOffset, byte bLength) {
-        SeedKeeper wal = new SeedKeeper(bArray, bOffset, bLength);
-    }
 
     public boolean select() {
         /*
