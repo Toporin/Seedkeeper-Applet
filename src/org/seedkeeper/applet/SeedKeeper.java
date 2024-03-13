@@ -343,6 +343,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     
     // subtype (optionnal, default = 0)
     private final static byte SECRET_SUBTYPE_DEFAULT = (byte) 0x00;
+    // for SECRET_TYPE_KEY
+    private final static byte SECRET_SUBTYPE_ENTROPY = (byte) 0x10;
 
     // export policy 
     private final static byte SECRET_EXPORT_MASK = (byte) 0x03; // mask for the export controls
@@ -372,7 +374,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_OFFSET_EXPORT_NBSECURE=(byte) 4;
     private final static byte SECRET_OFFSET_EXPORT_COUNTER=(byte) 5; //(pubkey only) nb of time this pubkey has been used to export secret
     private final static byte SECRET_OFFSET_FINGERPRINT=(byte) 6; 
-    private final static byte SECRET_OFFSET_RFU1=(byte) 10; // can be used to provide subtype context about the key (TBD)
+    //private final static byte SECRET_OFFSET_RFU1=(byte) 10; // deprecated, now used for secret subtype
+    private final static byte SECRET_OFFSET_SUBTYPE=(byte) 10; // can be used to provide subtype context about the key 
     private final static byte SECRET_OFFSET_RFU2=(byte) 11; 
     private final static byte SECRET_OFFSET_LABEL_SIZE=(byte) 12;
     private final static byte SECRET_OFFSET_LABEL=(byte) 13;
@@ -1090,6 +1093,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      ****************************************/   
     
     /** 
+     * DEPRECATED: use generateRandomSecret() instead
      * This function generates a master seed randomly within the SeedKeeper
      * 
      * ins: 0xA0
@@ -1130,7 +1134,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
         recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
         recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0;
-        recvBuffer[SECRET_OFFSET_RFU1]= (byte)0;
+        recvBuffer[SECRET_OFFSET_SUBTYPE]= (byte)0;
         recvBuffer[SECRET_OFFSET_RFU2]= (byte)0;
         recvBuffer[SECRET_OFFSET_LABEL_SIZE]= (byte) (label_size & 0x7f);
         Util.arrayFillNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE, (byte)0);
@@ -1172,6 +1176,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     }
     
     /** 
+     * DEPRECATED: use generateRandomSecret() instead
      * This function generates a 2FA-secret randomly within the SeedKeeper
      * 
      * ins: AE
@@ -1208,7 +1213,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         recvBuffer[SECRET_OFFSET_EXPORT_NBPLAIN]= (byte)0;
         recvBuffer[SECRET_OFFSET_EXPORT_NBSECURE]= (byte)0;
         recvBuffer[SECRET_OFFSET_EXPORT_COUNTER]= (byte)0;
-        recvBuffer[SECRET_OFFSET_RFU1]= (byte)0;
+        recvBuffer[SECRET_OFFSET_SUBTYPE]= (byte)0;
         recvBuffer[SECRET_OFFSET_RFU2]= (byte)0;
         recvBuffer[SECRET_OFFSET_LABEL_SIZE]= (byte) (label_size & 0x7f);
         Util.arrayFillNonAtomic(recvBuffer, SECRET_OFFSET_FINGERPRINT, SECRET_FINGERPRINT_SIZE, (byte)0);
@@ -1333,7 +1338,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN, (byte)0);
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, (byte)0);
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_COUNTER, (byte)0);
-        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU1, secret_subtype);
+        om_secrets.setObjectByte(obj_base, SECRET_OFFSET_SUBTYPE, secret_subtype);
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU2, (byte)0);
         om_secrets.setObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE, (byte) (label_size & 0x7f));
         om_secrets.setObjectData(obj_base, SECRET_OFFSET_LABEL, buffer, buffer_offset, label_size);
@@ -1409,9 +1414,7 @@ public class SeedKeeper extends javacard.framework.Applet {
             om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN, (byte)0);
             om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, (byte)0);
             om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_COUNTER, (byte)0);
-            // om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU1, (byte)(secret_id>>8));
-            // om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU2, (byte)(secret_id & 0xff));
-            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU1, (byte)0);
+            om_secrets.setObjectByte(obj_base, SECRET_OFFSET_SUBTYPE, SECRET_SUBTYPE_ENTROPY);
             om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU2, (byte)0);
             om_secrets.setObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE, (byte)ENTROPY_LABEL.length);
             om_secrets.setObjectData(obj_base, SECRET_OFFSET_LABEL, ENTROPY_LABEL, (short)0, (short)ENTROPY_LABEL.length);
@@ -1823,7 +1826,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 byte export_rights= (byte)(buffer[buffer_offset]&SECRET_EXPORT_MASK);
                 buffer_offset++;
                 buffer_offset+=7; // skip export_nb_plain, export_nb_secure, export_counter_pubkey and fingerprint
-                byte RFU1= buffer[buffer_offset];
+                byte subtype= buffer[buffer_offset];
                 buffer_offset++;
                 byte RFU2= buffer[buffer_offset];
                 buffer_offset++;
@@ -1916,7 +1919,7 @@ public class SeedKeeper extends javacard.framework.Applet {
                 om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBPLAIN, (byte)0);
                 om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_NBSECURE, (byte)0);
                 om_secrets.setObjectByte(obj_base, SECRET_OFFSET_EXPORT_COUNTER, (byte)0);
-                om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU1, RFU1);
+                om_secrets.setObjectByte(obj_base, SECRET_OFFSET_SUBTYPE, subtype);
                 om_secrets.setObjectByte(obj_base, SECRET_OFFSET_RFU2, RFU2);
                 om_secrets.setObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE, (byte) (label_size & 0x7f));
                 om_secrets.setObjectData(obj_base, SECRET_OFFSET_LABEL, buffer, label_offset, label_size);
@@ -2453,7 +2456,7 @@ public class SeedKeeper extends javacard.framework.Applet {
         label_size= om_secrets.getObjectByte(obj_base, SECRET_OFFSET_LABEL_SIZE);
         om_secrets.getObjectData(obj_base, (short)0, buffer, buffer_offset, SECRET_HEADER_SIZE); // header without label
         buffer[(short)(buffer_offset+SECRET_OFFSET_LABEL_SIZE)]= (byte)0; // set label_size to 0
-        buffer[(short)(buffer_offset+SECRET_OFFSET_RFU1)]= (byte)0; // reset subtype to 0
+        buffer[(short)(buffer_offset+SECRET_OFFSET_SUBTYPE)]= (byte)0; // reset subtype to 0 (default: Masterseed without any meta data)
         buffer_offset+=SECRET_HEADER_SIZE;
         lock_obj_offset= (short)(SECRET_HEADER_SIZE+label_size);
         lock_data_remaining= (short)(obj_size-lock_obj_offset);
