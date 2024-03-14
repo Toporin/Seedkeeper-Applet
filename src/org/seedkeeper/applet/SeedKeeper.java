@@ -292,6 +292,8 @@ public class SeedKeeper extends javacard.framework.Applet {
     // JC API 2.2.2 does not define these constants:
     private static final byte TYPE_AES_TRANSIENT_DESELECT = 14;
     private static final byte TYPE_AES_TRANSIENT_RESET = 13;
+    private static final byte TYPE_EC_FP_PRIVATE_TRANSIENT_DESELECT = 31;
+    private static final byte TYPE_EC_FP_PRIVATE_TRANSIENT_RESET = 30;
     private final static byte ALG_ECDSA_SHA_256= (byte) 33;
     private final static byte ALG_EC_SVDP_DH_PLAIN= (byte) 3; //https://javacard.kenai.com/javadocs/connected/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN
     private final static byte ALG_EC_SVDP_DH_PLAIN_XY= (byte) 6; //https://docs.oracle.com/javacard/3.0.5/api/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN_XY
@@ -614,8 +616,20 @@ public class SeedKeeper extends javacard.framework.Applet {
                 sc_sessionkey = (AESKey)KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
             }
         }
-        //sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false); // todo: make transient?
-        sc_ephemeralkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        //sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+        try {
+            // Put the EC key in RAM if we can.
+            sc_ephemeralkey= (ECPrivateKey) KeyBuilder.buildKey(TYPE_EC_FP_PRIVATE_TRANSIENT_DESELECT, LENGTH_EC_FP_256, false);
+        } catch (CryptoException e) {
+            try {
+                // This uses a bit more RAM, but at least it isn't using flash.
+                sc_ephemeralkey= (ECPrivateKey) KeyBuilder.buildKey(TYPE_EC_FP_PRIVATE_TRANSIENT_RESET, LENGTH_EC_FP_256, false);
+            } catch (CryptoException x) {
+                // Last option as it will wear out the flash eventually
+                sc_ephemeralkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+            }
+        }
+        //sc_ephemeralkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
         sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
         
         //secret secure channel objects are used to create a secure channel for encrypting secrets for export to another device. 
