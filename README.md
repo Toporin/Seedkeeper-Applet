@@ -134,6 +134,20 @@ In command line, simply type:
 
 For installation, refer to the [Satochip applet repository](https://github.com/Toporin/SatoChipApplet). 
 
+# SDK
+
+Several libraries are available to simplify integration of SeedKeeper with client applications:
+* Python: Pysatochip (also availabl in [pypi](https://pypi.org/project/pysatochip/))
+* (WIP) Java/Kotlin: [Satochip-Java](https://github.com/Toporin/Satochip-Java)
+* (WIP) Swift:  [SatochipSwift](https://github.com/Toporin/SatochipSwift)
+
+# Tests
+
+Python unit tests are available through the [pysatochip module](https://github.com/Toporin/pysatochip).
+
+The unit tests can be performed using:
+```python -m unittest -v test_seedkeeper```
+
 # License
 
 This application is distributed under the GNU Affero General Public License version 3.
