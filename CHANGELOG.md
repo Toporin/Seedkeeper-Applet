@@ -82,6 +82,10 @@ SeedKeeper applet full versions follows this format: vX.Y-Z.W where:
 
 ### Changed
 
+- Refactor 'reset to factory'.
+    * previously: triggered by sending a specific APDU 5 times in a row, while removing the card between apdu
+    * now: 'reset to factory' is triggered when the PIN and PUK are blocked (since the card is basically unusable at this stage anyway)
+
 - in secret header (meta ata), assign available RFU1 byte to store secret subtype
     For each secret, we can provide a subtype with more context about the secret type.
     For SECRET_TYPE_MASTERSEED, that can be a slightly different format (including BIP39 meta data for example)
@@ -106,6 +110,16 @@ SeedKeeper applet full versions follows this format: vX.Y-Z.W where:
     * SECRET_EXPORT_SECUREONLY
     * SECRET_EXPORT_AUTHENTICATED (RFU, not supported yet)
     Same policy is used for Secret usage, i.e. BIP32 derivation of masterseed or derivation of master password.
+
+- Simplify PIN management:
+    * Use only 1 PIN and 1 PUK
+    * remove default PIN value, create & set PIN during setup
+    * remove CreatePIN() function
+    * remove ListPINs() function
+
+### Fix
+    
+- patch spurious select issue (see https://github.com/Toporin/SatochipApplet/issues/11)
 
 ### Optimizations
 

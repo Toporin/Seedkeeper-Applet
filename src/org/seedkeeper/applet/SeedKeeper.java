@@ -75,7 +75,7 @@ public class SeedKeeper extends javacard.framework.Applet {
      * APPLET VERSION:   changes with no impact on compatibility of the client
      */
     // 0.1-0.1: initial version
-    // 0.2-0.1: WIP
+    // 0.2-0.1: add reset secret, BIP32 & BIP85 support, and various improvements (see CHANGELOG.md for details)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 2;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
