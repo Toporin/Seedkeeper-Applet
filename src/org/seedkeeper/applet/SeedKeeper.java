@@ -156,7 +156,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte INS_LIST_SECRET_HEADERS= (byte)0xA6;
     private final static byte INS_PRINT_LOGS= (byte)0xA9;
     private final static byte INS_EXPORT_AUTHENTIKEY= (byte) 0xAD;
-    private final static byte INS_DERIVE_MASTER_PASSWORD= (byte) 0xAA;
+    private final static byte INS_DERIVE_MASTER_PASSWORD= (byte) 0xAF;
     
     
     // Personalization PKI support
@@ -254,7 +254,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     /** Wrong Fingerprint when importing Secret through Secure import**/
     private final static short SW_SECURE_IMPORT_WRONG_FINGERPRINT= (short) 0x9C34;
     /** wrong secret type for the requested operation **/
-    private final static short SW_WRONG_SECRET_TYPE= (short) 0x9C35;
+    private final static short SW_WRONG_SECRET_TYPE= (short) 0x9C38;
 
     /** HMAC errors */
     static final short SW_HMAC_UNSUPPORTED_KEYSIZE = (short) 0x9c1E;
