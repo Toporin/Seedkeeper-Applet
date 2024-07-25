@@ -90,7 +90,7 @@ SeedKeeper applet full versions follows this format: vX.Y-Z.W where:
     For each secret, we can provide a subtype with more context about the secret type.
     For SECRET_TYPE_MASTERSEED, that can be a slightly different format (including BIP39 meta data for example)
     For SECRE_TYPE_KEY, that can be the type of the key (AES-128/AES-256, entropy...)
-    The subtype byte is loosely enforced by the applet, it is mainly used by client application  for context.
+    The subtype byte is loosely enforced by the applet, it is mainly used by client application for context.
 
 - importSecret() and exportSecret() memory optimization
     Previously, recvBuffer was used as a temporary buffer to store the full secret during import/export steps.
