@@ -343,7 +343,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte SECRET_TYPE_CERTIFICATE= (byte) 0xA0;
     private final static byte SECRET_TYPE_2FA= (byte) 0xB0; // to deprecate and use SECRET_TYPE_KEY instead
     private final static byte SECRET_TYPE_DATA= (byte) 0xC0;
-    //private final static byte SECRET_TYPE_BITCOIN_DESCRIPTOR; // use data subtype
+    private final static byte SECRET_TYPE_WALLET_DESCRIPTOR= (byte) 0xC1;
     
     // subtype (optionnal, default = 0)
     private final static byte SECRET_SUBTYPE_DEFAULT = (byte) 0x00;
