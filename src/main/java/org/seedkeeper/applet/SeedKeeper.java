@@ -123,6 +123,7 @@ public class SeedKeeper extends javacard.framework.Applet {
     private final static byte INS_GET_STATUS = (byte) 0x3C;
     private final static byte INS_CARD_LABEL= (byte)0x3D;
     private final static byte INS_SET_NFC_POLICY = (byte) 0x3E;
+    private final static byte INS_SET_NDEF= (byte)0x3F;
 
     // HD wallet
     //private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
@@ -849,6 +850,9 @@ public class SeedKeeper extends javacard.framework.Applet {
                 break;
             case INS_CARD_LABEL:
                 sizeout= card_label(apdu, buffer);
+                break;
+            case INS_SET_NDEF:
+                sizeout= setNDEF(apdu, buffer);
                 break;
             case INS_SET_NFC_POLICY:
                 sizeout= setNfcPolicy(apdu, buffer);
@@ -3084,6 +3088,35 @@ public class SeedKeeper extends javacard.framework.Applet {
                 
         }//end switch()
         
+        return (short)0;
+    }
+
+    /**
+    * This function set the content of the NDEF data file returned by the NDEF applet. 
+    * This requires the PIN to be verified.
+    *
+    *  ins: 0x3F
+    *  p1: 0x00
+    *  p2: 0x00
+    *  data: [ndef_data size(1b) | ndef_data]
+    *  return: (none)
+    */
+    public short setNDEF(APDU apdu, byte[] buffer) {
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        short dataLen = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        short ndefLen = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_CDATA]);
+
+        if (ndefLen != (short)(dataLen - 1)) {
+          ISOException.throwIt(SW_INVALID_PARAMETER);
+        }
+
+        JCSystem.beginTransaction();
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, SharedMemory.ndefDataFile, (short) 0, dataLen);
+        JCSystem.commitTransaction();
+
         return (short)0;
     }
 

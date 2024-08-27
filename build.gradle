@@ -1,0 +1,98 @@
+apply plugin: 'javacard'
+
+buildscript {
+  repositories {
+    maven { url 'http://releases.marmeladburk.fidesmo.com/' }
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+  }
+
+  dependencies {
+    classpath 'com.fidesmo:gradle-javacard:0.2.7'
+    //classpath 'com.github.status-im.status-keycard-java:desktop:64aece4'
+  }
+}
+
+javacard {
+  sdkVersion = "3.0.4"
+
+  cap {
+    aid = '0x53:0x65:0x65:0x64:0x4b:0x65:0x65:0x70:0x65:0x72'
+    //aid = '0xA0:0x00:0x00:0x08:0x04:0x00:0x01'
+    packageName = 'org.seedkeeper.applet'
+    applet {
+      aid = '0x53:0x65:0x65:0x64:0x4b:0x65:0x65:0x70:0x65:0x72:0x00'
+      //aid = '0xA0:0x00:0x00:0x08:0x04:0x00:0x01:0x01'
+      className = 'SeedKeeper'
+    }
+    applet {
+      aid = '0x53:0x65:0x65:0x64:0x4b:0x65:0x65:0x70:0x65:0x72:0x01'
+      //aid = '0xA0:0x00:0x00:0x08:0x04:0x00:0x01:0x02'
+      className = 'NDEFApplet'
+    }
+    version = '0.2'
+  }
+}
+
+// def testTarget = project.properties['im.status.keycard.test.target']
+// if (!testTarget) {
+//   testTarget = 'card'
+// }
+
+// def pairingPass = project.properties['im.status.keycard.test.pairing']
+// if (!pairingPass) {
+//   pairingPass = 'KeycardDefaultPairing'
+// }
+
+
+repositories {
+  mavenCentral()
+  maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+  //testCompile(files("../jcardsim/jcardsim-3.0.5-SNAPSHOT.jar"))
+  //testCompile('org.web3j:core:2.3.1')
+  //testCompile('org.bitcoinj:bitcoinj-core:0.14.5')
+  // testCompile('com.github.status-im.status-keycard-java:desktop:3.1.2')
+  // testCompile('org.bouncycastle:bcprov-jdk15on:1.65')
+  //testCompile("org.junit.jupiter:junit-jupiter-api:5.1.1")
+  //testRuntime("org.junit.jupiter:junit-jupiter-engine:5.1.1")
+}
+
+// test {
+//   classpath = sourceSets.test.runtimeClasspath.filter { f -> f.name != "api_classic.jar" }
+//   useJUnitPlatform {
+//     excludeTags 'manual'
+//   }
+// }
+
+// task install (type: im.status.keycard.build.InstallTask)
+task install (type: org.seedkeeper.build.InstallTask)
+tasks.install.dependsOn(convertJavacard)
+
+/*if (testTarget == 'card') {
+  tasks.install.dependsOn(convertJavacard)
+  tasks.test.dependsOn(install)
+}*/
+
+compileJava {
+  sourceCompatibility = 1.6
+  targetCompatibility = 1.6
+}
+
+/*compileTestJava {
+  sourceCompatibility = 1.8
+  targetCompatibility = 1.8
+}*/
+
+/*afterEvaluate {
+  def jvmArgs = ["-Dim.status.keycard.test.target=${testTarget}", "-Dim.status.keycard.test.pairing=${pairingPass}"]
+
+  if (testTarget == 'simulator') {
+    jvmArgs.push('-noverify')
+  }
+
+  def testTask = tasks.getByName('test')
+  testTask.jvmArgs(jvmArgs)
+}*/
