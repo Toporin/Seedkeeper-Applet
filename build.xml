@@ -14,7 +14,7 @@
 		
 		
 		<javacard jckit="sdks/jc304_kit">
-		  <cap aid="536565644b6565706572" version="0.1" output="SeedKeeper-3.0.4.cap" sources="src\org\seedkeeper\applet">
+		  <cap aid="536565644b6565706572" version="0.1" output="SeedKeeper-3.0.4.cap" sources="src\main\java\org\seedkeeper\applet">
 			<applet class="org.seedkeeper.applet.SeedKeeper" aid="536565644b656570657200"/>
 		  </cap>
 		</javacard>
