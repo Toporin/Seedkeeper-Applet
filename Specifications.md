@@ -77,10 +77,10 @@ Some secret types support multiple subtypes or formats that are detailed below.
 
 ## SECRET_TYPE_BIP39_MNEMONIC & SECRET_TYPE_ELECTRUM_MNEMONIC format
 
-* with subtype SECRET_SUBTYPE_DEFAULT : [ mnemonic_size(1b) | mnemonic_bytes | passphrase_size(1b) | passphrase_bytes] where 
+* with subtype SECRET_SUBTYPE_DEFAULT : [ mnemonic_size(1b) | mnemonic_bytes | passphrase_size(1b) | passphrase_bytes | descriptor_size(2b) | wallet_descriptor] where 
 	* mnemonic_bytes is the utf-8 encoding of the 12-24 words mnemonic (in canonical format)
 	* passphrase_bytes is the utf-8 encoding of the passphrase (optional)
-
+	* wallet_descriptor is a wallet descriptor (optional)
 
 ## SECRET_TYPE_PUBKEY
 

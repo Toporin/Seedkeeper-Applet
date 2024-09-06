@@ -144,7 +144,7 @@ git submodule add https://github.com/martinpaljak/oracle_javacard_sdks sdks
 
 Then you must set the JavaCard HOME. The gradle.properties file has a setting with the property "com.fidesmo.gradle.javacard.home" set to the correct path.
 
-To compile the javacard code and generate a cap file, simply run `./gradlew convertJavacard`
+To compile the javacard code and generate a cap file, simply run `./gradlew convertJavacard`. The cap file will be compiled in the `build/javacard/org/seedkeeper/applet` folder.
 
 To load the cap file into a blank smart card, connect a card reader with the card inserted and run `./gradlew install`
 
