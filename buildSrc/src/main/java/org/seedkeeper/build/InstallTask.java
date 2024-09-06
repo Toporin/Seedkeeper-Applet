@@ -1,6 +1,5 @@
 package org.seedkeeper.build;
 
-import im.status.keycard.applet.Identifiers;
 import im.status.keycard.desktop.PCSCCardChannel;
 import im.status.keycard.globalplatform.GlobalPlatformCommandSet;
 import im.status.keycard.globalplatform.Load;

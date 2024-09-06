@@ -79,6 +79,9 @@ SeedKeeper applet full versions follows this format: vX.Y-Z.W where:
     * NFC_DISABLED=1; // can be re-enabled at any time
     * NFC_BLOCKED=2; // cannot be re-enabled except with reset factory!
 
+- add NDEF support via the NDEFApplet and a data array shared with the SeedKeeper applet.
+    * NDEF data can be changed through the Seedkeeper applet, after PIN validation
+
 
 ### Changed
 
