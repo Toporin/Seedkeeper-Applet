@@ -1,0 +1,47 @@
+apply plugin: 'javacard'
+
+buildscript {
+  repositories {
+    maven { url 'http://releases.marmeladburk.fidesmo.com/' }
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+  }
+
+  dependencies {
+    classpath 'com.fidesmo:gradle-javacard:0.2.7'
+  }
+}
+
+javacard {
+  sdkVersion = "3.0.4"
+
+  cap {
+    aid = '0x53:0x65:0x65:0x64:0x4b:0x65:0x65:0x70:0x65:0x72'
+    packageName = 'org.seedkeeper.applet'
+    applet {
+      aid = '0x53:0x65:0x65:0x64:0x4b:0x65:0x65:0x70:0x65:0x72:0x00'
+      className = 'SeedKeeper'
+    }
+    applet {
+      aid = '0x53:0x65:0x65:0x64:0x4b:0x65:0x65:0x70:0x65:0x72:0x01'
+      className = 'NDEFApplet'
+    }
+    version = '0.2'
+  }
+}
+
+repositories {
+  mavenCentral()
+  maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+}
+
+task install (type: org.seedkeeper.build.InstallTask)
+tasks.install.dependsOn(convertJavacard)
+
+compileJava {
+  sourceCompatibility = 1.6
+  targetCompatibility = 1.6
+}

@@ -3,3 +3,15 @@ dist/
 .classpath
 .project
 gp.exe
+
+# IntelliJ IDEA project files
+.idea
+*.iml
+/.vscode
+
+# Gradle output
+/.gradle
+/build
+/bin
+buildSrc/build
+buildSrc/.gradle
