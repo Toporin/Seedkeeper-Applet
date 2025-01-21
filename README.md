@@ -57,55 +57,15 @@ When a user wants to export a seed from a device A to another device B, he selec
 # How to use your SeedKeeper?
 
 Current applications available to be use with a Seedkeeper:
-* Windows & Linux: [Seedkeeper-Tool](https://github.com/Toporin/Seedkeeper-Tool)
-* Macos tool will be released later.
+* Windows, Linux & Mac: [Sato-Tool](https://github.com/Toporin/Satochip-Utils)
+* Android app: [Google Play](https://play.google.com/store/apps/details?id=org.satochip.seedkeeper&hl=en), [Github](https://github.com/Toporin/Seedkeeper-Android)
+* iOS app: [App store](https://apps.apple.com/be/app/seedkeeper/id6502836060), [Github](https://github.com/Toporin/Seedkeeper-iOS)
+* For developers: there is a Command Line Interface available with pysatochip library: [Github](https://github.com/Toporin/pysatochip), [Pypi](https://pypi.org/project/pysatochip/)
 
-To use your SeedKeeper, simply connect a card reader and insert the SeedKeeper in it, then run the SeedKeeper-Tool on your computer. If you are on Linux, you may need to install the smartcard driver if the card is not detected (for example on Ubuntu: "sudo apt install pcscd"). 
+To use your SeedKeeper with a computer, simply connect a card reader and insert the SeedKeeper in it, then run the Sato-Tool on your computer. If you are on Linux, you may need to install the smartcard driver if the card is not detected (for example on Ubuntu: "sudo apt install pcscd"). 
 On the first usage, you will need to initialize the card by defining a PIN code and optionnaly a label to identify the card. On the subsequent use, you will have to enter your PIN code in order to use your SeedKeeper, so be sure to memorize this PIN correctly!
 
-The SeedKeeper-Tool provides the following menu:
-* Generate a new Secret on-card: a new Secret (Masterseed or 2FA secret) is generated randomly on the card. The Masterseed can then be used to to initialize a new wallet or enable 2FA.
-
-* Import a secret: here are the type of sensitive data that can be imported from the submenu: 
-    * a Mnemonic phrase (12-24 words)
-    * an existing Masterseed
-    * an encrypted seed in JSON format
-    * an authentikey from the Truststore (used to pair 2 devices)
-    * a trusted pubkey (also used to pair 2 devices, but does not come from the Truststore)
-    * a Password (a generic secret that you would like to store securely, e.g. the master password from a password manager application)
-
-* Export a Secret: export any of the Secret stored in the SeedKeeper. 
-In the submenu, you can choose the Secret to export based on its label and fingerprint.
-You can also choose the type of export: in plaintext (if allowed) or encrypted based on the authentikeys available for pairing.
- 
-* Make a backup: allows to export all the secrets encrypted based on the selected authentikey.
-
-* List Secrets: list, for each secret stored in the SeedKeeper, the following info:
-    * Id: the id of the secret, a unique number
-    * Label: the label associated with the secret
-    * Type: can be Masterseed, BIP39 mnemonic, Electrum mnemonic, Public Key (Authentikey), Password
-    * Origin: whether the Secret has been generated on the card, or imported in plaintext/encrypted form.
-    * Export rights: whether the Secret can be exported in plaintext or only in encrypted form
-    * Nb plain exports: the number of time the Secret has been exported in plaintext
-    * Nb encrypted exports: the number of time the Secret has been exported encrypted
-    * Nb secret exported: the number of Secrets exported with this authentikey  (only for Public Key type)
-    * Fingerprint: the first 8 hex-characters of the hash of the Secret, used to uniquely identify a secret 
-
-* get logs: provides a log of every sensitive action performed with the SeedKeeper including:
-    * the action performed such as import, export, PIN operation...
-    * the ID of the secret(s) involved 
-    * the result of the operation: success or error type
-
-* About: provides basic info about the cards and the application:
-    * Card label 
-    * Firmware version installed on the card
-    * Firmware protocol version supported by the application
-    * Show Truststore: show the content of the Truststore, i.e. the authentikeys of cards inserted so far.
-    * Verify card: allows to authenticate the card issuer through a certificate optionaly loaded on the card during personalization.
-
-* Help: this help guide
-
-* Quit: close the application
+On a smartphone, you can connect to the card through NFC.
 
 # How to use SeedKeeper with your Satochip?
 
@@ -124,11 +84,43 @@ For supported hardware, refer to the [Satochip applet repository](https://github
 
 # Buidl & install
 
+## Building using Ant (legacy)
+
 You can build the javacard CAP files or use the last [release](https://github.com/Toporin/Seedkeeper-Applet/releases).
 
-To generate the CAP file from the sources, you can use the Eclipse IDE with the [ant-javacard](https://github.com/martinpaljak/ant-javacard) Ant task (see the instruction on the ant-javacard github repository).
+To generate the CAP file from the sources, you can use the [ant-javacard](https://github.com/martinpaljak/ant-javacard) Ant task (see the instructions on the ant-javacard github repository).
 
-For installation, refer to the [Satochip applet repository](https://github.com/Toporin/SatoChipApplet). 
+For detailed build and installation, refer to the [Satochip applet repository](https://github.com/Toporin/SatoChipApplet).
+
+## Building using Gradle (new)
+
+The project can also be built using Gradle with the [Fidesmo Javacard Gradle plugin](https://github.com/fidesmo/gradle-javacard).
+Using this approach allows to load the NDEF applet at the same time (allows to automatically open the right application on Android by simply tapping the card).
+
+For compiling the javacard code, you first need to download the javacard SDK into the project in the `sdks` folder:
+```
+git submodule add https://github.com/martinpaljak/oracle_javacard_sdks sdks
+```
+
+Then you must set the JavaCard HOME. The gradle.properties file has a setting with the property "com.fidesmo.gradle.javacard.home" set to the correct path.
+
+To compile the javacard code and generate a cap file, simply run `./gradlew convertJavacard`. The cap file will be compiled in the `build/javacard/org/seedkeeper/applet` folder.
+
+To load the cap file into a blank smart card, connect a card reader with the card inserted and run `./gradlew install`
+
+# SDK
+
+Several libraries are available to simplify integration of SeedKeeper with client applications:
+* Python: Pysatochip (also availabl in [pypi](https://pypi.org/project/pysatochip/))
+* Java/Kotlin: [Satochip-Java](https://github.com/Toporin/Satochip-Java)
+* Swift:  [SatochipSwift](https://github.com/Toporin/SatochipSwift)
+
+# Tests
+
+Python unit tests are available through the [pysatochip module](https://github.com/Toporin/pysatochip).
+
+The unit tests can be performed using:
+```python -m unittest -v test_seedkeeper```
 
 # License
 

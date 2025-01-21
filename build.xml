@@ -12,24 +12,9 @@
 	
 	<target name="build">
 		
-		<!-- 
-		<javacard>
-		  <cap jckit="C:\Dev\java_card_kit-2_2_2\java_card_kit-2_2_2" aid="536565644b6565706572" version="0.1" output="SeedKeeper-2.2.2.cap" sources="src\org\satochip\applet">
-			<applet class="org.seedkeeper.applet.SeedKeeper" aid="536565644b656570657200"/>
-		  </cap>
-		</javacard>
-		-->
 		
-		<!-- 
-		<javacard>
-		  <cap jckit="C:\Dev\jc303_kit" aid="536565644b6565706572" version="0.1" output="SatoChip-3.0.3.cap" sources="src\org\seedkeeper\applet">
-			<applet class="org.seedkeeper.applet.SeedKeeper" aid="536565644b656570657200"/>
-		  </cap>
-		</javacard>
-		-->
-		
-		<javacard>
-		  <cap jckit="C:\Dev\jc304_kit" aid="536565644b6565706572" version="0.1" output="SeedKeeper-3.0.4.cap" sources="src\org\seedkeeper\applet">
+		<javacard jckit="sdks/jc304_kit">
+		  <cap aid="536565644b6565706572" version="0.1" output="SeedKeeper.cap" sources="src\main\java\org\seedkeeper\applet">
 			<applet class="org.seedkeeper.applet.SeedKeeper" aid="536565644b656570657200"/>
 		  </cap>
 		</javacard>
